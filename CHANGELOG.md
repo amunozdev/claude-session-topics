@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.1] — 2026-05-28
+
+### Fixed
+- Background topic refinement never ran on macOS: the hook relied on `timeout` and `flock`, neither of which ships with macOS, so every session was stuck on the heuristic (first words of the prompt) and no session ever reached the `refined` source. Refinement now uses a portable `run_with_timeout` helper (`timeout`/`gtimeout` when present, pure-bash watchdog otherwise) and an atomic `mkdir`-based single-flight lock with stale-lock recovery.
+- `claude -p` refinement returned conversational text instead of a topic. The instruction now lives in the message body with `--max-turns 1` (instead of `--append-system-prompt`), yielding a clean 2–5 word topic.
+
+### Changed
+- Heuristic placeholder is quieter: strips attachment markers (`[Image …]`) and a wider set of leading fillers (`bien`, `bueno`, `ahora`, `entonces`, `ok`, `dale`, …), drops bilingual acknowledgements (`si`, `sí`, `ok`, `dale`, `procedé`, …), and stays empty for a lone short word — waiting for the refinement rather than writing noise.
+
 ## [5.0.0] — 2026-04-13
 
 ### Added

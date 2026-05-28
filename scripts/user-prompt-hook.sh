@@ -27,6 +27,18 @@ else
   sanitize_session_id() { echo "$1" | tr -cd 'a-zA-Z0-9_-'; }
   ensure_topics_dir() { mkdir -p "$HOME/.claude/session-topics"; }
   find_claude_pid() { echo ""; }
+  run_with_timeout() {
+    local secs="$1"; shift
+    if command -v timeout >/dev/null 2>&1; then timeout "$secs" "$@"; return $?; fi
+    if command -v gtimeout >/dev/null 2>&1; then gtimeout "$secs" "$@"; return $?; fi
+    "$@" &
+    local cmd_pid=$!
+    ( sleep "$secs"; kill -TERM "$cmd_pid" 2>/dev/null ) &
+    local watch_pid=$!
+    wait "$cmd_pid" 2>/dev/null; local rc=$?
+    kill -TERM "$watch_pid" 2>/dev/null; wait "$watch_pid" 2>/dev/null
+    return "$rc"
+  }
 fi
 
 input=$(cat)
@@ -105,9 +117,15 @@ extract_heuristic() {
   if printf '%s' "$text" | LC_ALL=C grep -qE '[ñÑ¿¡áéíóúÁÉÍÓÚ]'; then
     lang="es"
   fi
-  # Strip leading greetings/fillers (case-insensitive) — bilingual
+  # Strip attachment markers (e.g. "[Image #1]") and leading "Image"/"Imagen" noise
   local stripped
-  stripped=$(printf '%s' "$text" | sed -E 's/^[[:space:]]*(hola|hi|hey|hello|por favor|please|can you|could you|puedes|podrías|necesito|quiero|i want|i need|me gustaría|i would like|let'"'"'s|vamos a)[[:space:],:.!?-]+//I')
+  stripped=$(printf '%s' "$text" | sed -E 's/\[[^]]*\]//g; s/^[[:space:]]*(image|imagen)[[:space:]#0-9]*//I')
+  # Strip leading greetings/fillers (case-insensitive) — bilingual, repeatable
+  while :; do
+    local before="$stripped"
+    stripped=$(printf '%s' "$stripped" | sed -E 's/^[[:space:]]*(hola|hi|hey|hello|ok|okay|dale|bien|bueno|ahora|entonces|a ver|veamos|oye|por favor|please|can you|could you|puedes|podrías|necesito|quiero|i want|i need|me gustaría|i would like|let'"'"'s|vamos a)[[:space:],:.!?-]+//I')
+    [ "$stripped" = "$before" ] && break
+  done
   # Tokenize: keep alphanumerics + some technical chars within words
   local tokens
   tokens=$(printf '%s' "$stripped" | tr -c '[:alnum:]_\-áéíóúñÁÉÍÓÚÑ' '\n' | grep -v '^$' || true)
@@ -140,11 +158,40 @@ extract_heuristic() {
   done <<< "$tokens"
 
   if [ "${#picked[@]}" -eq 0 ]; then
-    # Fallback: first 3 raw words
+    # Fallback: first 3 raw words — only if there are ≥2 of them. With a single
+    # short word (e.g. "Si", "Procedé") leave the topic empty and wait for the
+    # async refinement instead of writing noise.
+    local raw=()
     while IFS= read -r tok; do
-      [ -n "$tok" ] && picked+=("$tok")
+      [ -n "$tok" ] && raw+=("$tok")
     done < <(printf '%s' "$stripped" | awk '{for(i=1;i<=3 && i<=NF;i++) print $i}')
+    if [ "${#raw[@]}" -ge 2 ]; then
+      picked=("${raw[@]}")
+    fi
   fi
+
+  # Drop bilingual acknowledgements that slip past the language-specific stop
+  # lists (short words like "Si" have no diacritics → detected as English).
+  local ack_re='^(si|sí|no|ok|okay|dale|listo|claro|dale|sip|nop|yep|yes|nope|procede|procedé|gracias|thanks)$'
+  if [ "${#picked[@]}" -gt 0 ]; then
+    local kept=()
+    for t in "${picked[@]}"; do
+      local lt
+      lt=$(printf '%s' "$t" | tr '[:upper:]' '[:lower:]')
+      echo "$lt" | grep -qE "$ack_re" && continue
+      kept+=("$t")
+    done
+    picked=()
+    [ "${#kept[@]}" -gt 0 ] && picked=("${kept[@]}")
+  fi
+
+  # A lone short token gives no session context — wait for refinement instead.
+  if [ "${#picked[@]}" -eq 1 ] && [ "${#picked[0]}" -lt 4 ]; then
+    picked=()
+  fi
+
+  # Nothing worth showing — leave empty and wait for async refinement
+  [ "${#picked[@]}" -eq 0 ] && { printf '%s' ""; return 0; }
 
   # Title-case: capitalize first letter of each token; keep ALL-CAPS techie tokens intact
   local out=""
@@ -196,11 +243,19 @@ refine_topic() {
     [ "$diff" -lt 15 ] && return 0
   fi
 
-  # Single-flight via flock
-  exec 9>"$REFINE_LOCK"
-  if ! flock -n 9; then
+  # Single-flight via atomic mkdir (flock is unavailable on macOS)
+  local lockdir="${REFINE_LOCK}.d"
+  # Steal a stale lock (>120s) left by a killed process
+  if [ -d "$lockdir" ]; then
+    local lk_mtime lk_now
+    lk_mtime=$(stat -f %m "$lockdir" 2>/dev/null || stat -c %Y "$lockdir" 2>/dev/null || echo 0)
+    lk_now=$(date +%s)
+    [ "$((lk_now - lk_mtime))" -ge 120 ] && rmdir "$lockdir" 2>/dev/null
+  fi
+  if ! mkdir "$lockdir" 2>/dev/null; then
     return 0
   fi
+  trap 'rmdir "$lockdir" 2>/dev/null || true' RETURN
 
   # Build context: current prompt + last 3 user messages from transcript (cap ~2KB)
   local context="$prompt_text"
@@ -219,12 +274,15 @@ refine_topic() {
     return 0
   fi
 
-  local sysprompt='Devuelve SOLO un tópico de 2 a 5 palabras (máximo 50 caracteres) que describa la tarea actual del usuario. Mismo idioma que el usuario. Sin comillas, sin punto final, sin prefijos como "Topic:". Reply ONLY with a 2-5 word topic (max 50 chars) describing the user task. Same language as user. No quotes, no trailing punctuation.'
+  local instruction='Genera un título corto (2 a 5 palabras, máximo 50 caracteres) que describa el tema de esta conversación. Responde ÚNICAMENTE con el título: sin comillas, sin explicación, sin puntuación final. Mismo idioma que el usuario.'
+  local full_prompt
+  full_prompt=$(printf '%s\n\nConversación:\n%s' "$instruction" "$context")
 
-  local refined
-  refined=$(printf '%s' "$context" | CLAUDE_SESSION_TOPICS_SKIP=1 timeout 25s \
-              claude -p --model haiku --append-system-prompt "$sysprompt" 2>/dev/null \
-              | tr -d '\r' | head -n 1 || true)
+  local refined out_file="${TOPIC_FILE}.refine.$$"
+  printf '%s' "$full_prompt" | CLAUDE_SESSION_TOPICS_SKIP=1 \
+    run_with_timeout 30 claude -p --model haiku --max-turns 1 >"$out_file" 2>/dev/null || true
+  refined=$(tr -d '\r' < "$out_file" 2>/dev/null | grep -v '^[[:space:]]*$' | head -n 1 || true)
+  rm -f "$out_file"
 
   # Sanitize: strip quotes, trim, whitelist chars, truncate
   refined=$(printf '%s' "$refined" \

@@ -1,6 +1,6 @@
 {
   "name": "@alexismunozdev/claude-session-topics",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "Session topics for Claude Code — auto-set and display a topic in the statusline, change anytime with /set-topic",
   "bin": {
     "claude-session-topics": "bin/install.js"

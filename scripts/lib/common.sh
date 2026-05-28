@@ -45,3 +45,19 @@ get_session_file() {
   local session_id="$1"
   echo "$HOME/.claude/session-topics/${session_id}"
 }
+
+# ── Run a command with a timeout, portable across systems without coreutils
+# Uses timeout/gtimeout if available, otherwise a pure-bash watchdog.
+# macOS ships neither timeout nor gtimeout by default.
+run_with_timeout() {
+  local secs="$1"; shift
+  if command -v timeout >/dev/null 2>&1; then timeout "$secs" "$@"; return $?; fi
+  if command -v gtimeout >/dev/null 2>&1; then gtimeout "$secs" "$@"; return $?; fi
+  "$@" &
+  local cmd_pid=$!
+  ( sleep "$secs"; kill -TERM "$cmd_pid" 2>/dev/null ) &
+  local watch_pid=$!
+  wait "$cmd_pid" 2>/dev/null; local rc=$?
+  kill -TERM "$watch_pid" 2>/dev/null; wait "$watch_pid" 2>/dev/null
+  return "$rc"
+}
