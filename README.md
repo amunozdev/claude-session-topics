@@ -7,13 +7,13 @@ Session topics for Claude Code. Auto-detect and display a topic in the statuslin
 ## Install
 
 ```bash
-npx @alexismunozdev/claude-session-topics
+npx --yes @alexismunozdev/claude-session-topics
 ```
 
 ## With color
 
 ```bash
-npx @alexismunozdev/claude-session-topics --color cyan
+npx --yes @alexismunozdev/claude-session-topics --color cyan
 ```
 
 Supported colors: `red`, `green`, `yellow`, `blue`, `magenta` (default), `cyan`, `white`, `orange`, `grey`/`gray`. Raw ANSI codes are also accepted (e.g., `38;5;208`).
@@ -23,8 +23,8 @@ Supported colors: `red`, `green`, `yellow`, `blue`, `magenta` (default), `cyan`,
 Get spoken alerts when Claude detects a new session topic — useful when multitasking across terminals.
 
 ```bash
-npx @alexismunozdev/claude-session-topics --voice       # English default
-npx @alexismunozdev/claude-session-topics --voice es    # Spanish fallback
+npx --yes @alexismunozdev/claude-session-topics --voice       # English default
+npx --yes @alexismunozdev/claude-session-topics --voice es    # Spanish fallback
 ```
 
 The voice **automatically matches your conversation language**. If you write in Spanish, you'll hear *"Tarea terminada: Deploy Config"*. In English: *"Done: Deploy Config"*.
@@ -40,7 +40,7 @@ The voice **automatically matches your conversation language**. If you write in 
 **Disable voice:**
 
 ```bash
-npx @alexismunozdev/claude-session-topics --no-voice
+npx --yes @alexismunozdev/claude-session-topics --no-voice
 ```
 
 **Customize** by editing `~/.claude/session-topics/.voice-config`:
@@ -88,7 +88,7 @@ The default topic color is bold magenta. Three ways to change it:
 
 - Re-run with `--color <name>`:
   ```bash
-  npx @alexismunozdev/claude-session-topics --color cyan
+  npx --yes @alexismunozdev/claude-session-topics --color cyan
   ```
 - Edit the config file directly:
   ```bash
@@ -170,7 +170,7 @@ export CLAUDE_SESSION_TOPICS_VERBOSE=1
 Or use the --verbose flag with the installer:
 
 ```bash
-npx @alexismunozdev/claude-session-topics --verbose
+npx --yes @alexismunozdev/claude-session-topics --verbose
 ```
 
 ### View Debug Logs
@@ -201,7 +201,7 @@ Log levels (set via `CLAUDE_SESSION_TOPICS_LOG_LEVEL`):
 ## Uninstall
 
 ```bash
-npx @alexismunozdev/claude-session-topics --uninstall
+npx --yes @alexismunozdev/claude-session-topics --uninstall
 ```
 
 This also removes voice configuration (`~/.claude/session-topics/.voice-config`).
