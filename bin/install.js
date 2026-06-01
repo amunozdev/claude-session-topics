@@ -213,7 +213,7 @@ ${BOLD}Usage:${RESET}
 
 ${BOLD}Options:${RESET}
   --color <name>   Set topic color (red, green, yellow, blue, magenta,
-                    cyan, white, orange, grey). Default: magenta
+                    cyan, white, orange, grey). Default: orange
   --uninstall      Remove scripts, settings, and skills (preserves topic data)
   --voice [lang]   Enable voice notifications when topic is detected
                     (default lang: en). Example: --voice es

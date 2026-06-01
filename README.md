@@ -16,7 +16,7 @@ npx @alexismunozdev/claude-session-topics
 npx @alexismunozdev/claude-session-topics --color cyan
 ```
 
-Supported colors: `red`, `green`, `yellow`, `blue`, `magenta` (default), `cyan`, `white`, `orange`, `grey`/`gray`. Raw ANSI codes are also accepted (e.g., `38;5;208`).
+Supported colors: `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `orange` (default — Claude Code's `#D97757`), `grey`/`gray`. Raw ANSI codes are also accepted (e.g., `38;5;208`).
 
 ## Voice notifications
 
@@ -84,7 +84,7 @@ Topic source precedence: `manual > custom-title > refined > heuristic > empty`.
 
 ## Customization
 
-The default topic color is bold magenta. Three ways to change it:
+The default topic color is bold orange (Claude Code's `#D97757`). Three ways to change it:
 
 - Re-run with `--color <name>`:
   ```bash
@@ -94,9 +94,9 @@ The default topic color is bold magenta. Three ways to change it:
   ```bash
   echo "cyan" > ~/.claude/session-topics/.color-config
   ```
-- Set the `CLAUDE_TOPIC_COLOR` environment variable:
+- Set the `CLAUDE_SESSION_TOPICS_COLOR` environment variable:
   ```bash
-  export CLAUDE_TOPIC_COLOR="cyan"
+  export CLAUDE_SESSION_TOPICS_COLOR="cyan"
   ```
 
 ## Token usage

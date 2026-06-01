@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.0] — 2026-06-01
+
+### Changed
+- Default topic color is now Claude Code's orange (`#D97757`, truecolor `38;2;217;119;87`) instead of magenta. The named `orange` color was repurposed from the 256-color approximation (`38;5;208`) to the brand truecolor, so it doubles as the new default.
+
+### Fixed
+- README documented the color env var as `CLAUDE_TOPIC_COLOR`, but the statusline reads `CLAUDE_SESSION_TOPICS_COLOR`. Corrected the docs.
+
 ## [5.0.1] — 2026-05-28
 
 ### Fixed
