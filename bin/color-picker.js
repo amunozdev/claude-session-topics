@@ -47,6 +47,17 @@ function reduceKey(state, key) {
     }
 }
 
+// Count the visual rows a rendered screen occupies, accounting for line wrap
+// at the given terminal width. Logical lines wider than `cols` wrap to multiple
+// rows; miscounting these leaves stale rows that accumulate on each repaint. Pure.
+function visualRowCount(screen, cols) {
+    const width = cols > 0 ? cols : 80;
+    const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+    return screen.split('\n').reduce((sum, line) => {
+        return sum + Math.max(1, Math.ceil(stripAnsi(line).length / width));
+    }, 0);
+}
+
 // Render the full picker screen for a given state. Pure → returns a string.
 function renderPicker(state) {
     const { index, sampleTopic = 'Deploy auth', model = 'Opus 4.8', project = 'my-project' } = state;
@@ -56,9 +67,8 @@ function renderPicker(state) {
     for (let i = 0; i < COLORS.length; i++) {
         const { name, ansi } = COLORS[i];
         const pointer = i === index ? '❱' : ' ';
-        const label = `${ansi}${name.padEnd(9)}${RESET}`;
         const swatch = `${BOLD}${ansi}◆ ${name}${RESET}`;
-        lines.push(` ${pointer} ${label}  ${swatch}`);
+        lines.push(` ${pointer} ${swatch}`);
     }
     const { ansi } = COLORS[index];
     lines.push('');
@@ -95,7 +105,7 @@ function runColorPicker(opts = {}) {
             }
             const screen = renderPicker({ index, sampleTopic, model, project });
             output.write(screen + '\n');
-            lastLineCount = screen.split('\n').length;
+            lastLineCount = visualRowCount(screen, output.columns);
         };
 
         const cleanup = () => {
@@ -128,4 +138,4 @@ function runColorPicker(opts = {}) {
     });
 }
 
-module.exports = { COLORS, reduceKey, renderPicker, runColorPicker };
+module.exports = { COLORS, reduceKey, renderPicker, visualRowCount, runColorPicker };

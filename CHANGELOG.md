@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `--color gray` (American spelling) was rejected by the installer even though the statusline resolved it — `gray` is now an accepted named color alongside `grey`.
 - Installer help and post-install summary still referenced the removed `auto-topic` skill and listed only the `Stop` hook. They now list just the `set-topic` skill and both hooks (`UserPromptSubmit` and `Stop`).
+- Color picker accumulated repeated header/list copies on every arrow keypress in narrow terminals: it moved the cursor up by logical line count, but long lines wrapped to more visual rows, so stale rows were never cleared. Repaints now account for line wrap at the current terminal width.
+
+### Changed
+- Color picker now shows a single colored swatch per row (`◆ name`) instead of a duplicated plain label plus swatch — the live preview already reflects the highlighted color.
 
 ### Docs
 - README documented a `--verbose` installer flag that does not exist; removed it (verbose logging is controlled via the `CLAUDE_SESSION_TOPICS_VERBOSE` env var).
