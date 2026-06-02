@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { EventEmitter } from 'events';
 
 // Test pure functions without mocking modules
 // We'll test behavior, not implementation details
@@ -97,15 +98,9 @@ describe('Installer Pure Functions', () => {
       mockError.mockRestore();
     });
 
-    it('should exit with error when --color has no value', () => {
-      const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {});
-      const mockError = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
-      parseArgs(['node', 'install.js', '--color']);
-      
-      expect(mockExit).toHaveBeenCalledWith(1);
-      mockExit.mockRestore();
-      mockError.mockRestore();
+    it('should open the picker (not exit) when --color has no value', () => {
+      const r = parseArgs(['node', 'install.js', '--color']);
+      expect(r.action).toBe('color-picker');
     });
 
     it('should handle multiple flags', () => {
@@ -573,6 +568,106 @@ describe('Installer Pure Functions', () => {
       // Let's test with a definitely short one
       expect(validateColor('0')).toBe(true); // 1 char - accepted
       expect(validateColor('38;5;208')).toBe(true); // 8 chars - accepted
+    });
+  });
+});
+
+describe('Interactive color picker', () => {
+  let mod;
+  beforeEach(async () => {
+    mod = await import('../../bin/install.js');
+  });
+
+  describe('parseArgs --color', () => {
+    it('opens the picker when --color has no value', () => {
+      const r = mod.parseArgs(['node', 'install.js', '--color']);
+      expect(r.action).toBe('color-picker');
+    });
+
+    it('opens the picker when --color is followed by another flag', () => {
+      const r = mod.parseArgs(['node', 'install.js', '--color', '--voice']);
+      expect(r.action).toBe('color-picker');
+      expect(r.voice).toBe(true);
+    });
+
+    it('sets the color directly when --color has a valid value', () => {
+      const r = mod.parseArgs(['node', 'install.js', '--color', 'yellow']);
+      expect(r.color).toBe('yellow');
+      expect(r.action).toBe('install');
+    });
+  });
+
+  describe('reduceKey', () => {
+    it('moves down/up with wrap-around', () => {
+      const last = mod.COLORS.length - 1;
+      expect(mod.reduceKey({ index: 0 }, '\x1b[B')).toEqual({ index: 1, action: 'move' });
+      expect(mod.reduceKey({ index: 0 }, '\x1b[A')).toEqual({ index: last, action: 'move' });
+      expect(mod.reduceKey({ index: last }, '\x1b[B')).toEqual({ index: 0, action: 'move' });
+    });
+
+    it('selects on Enter and Space', () => {
+      expect(mod.reduceKey({ index: 2 }, '\r').action).toBe('select');
+      expect(mod.reduceKey({ index: 2 }, ' ').action).toBe('select');
+    });
+
+    it('cancels on Esc and Ctrl-C', () => {
+      expect(mod.reduceKey({ index: 2 }, '\x1b').action).toBe('cancel');
+      expect(mod.reduceKey({ index: 2 }, '\x03').action).toBe('cancel');
+    });
+  });
+
+  describe('renderPicker', () => {
+    it('renders every color name and marks the active index', () => {
+      const screen = mod.renderPicker({ index: 4 });
+      for (const c of mod.COLORS) expect(screen).toContain(c.name);
+      expect(screen).toContain('❱');
+      expect(screen).toContain('Preview');
+    });
+
+    it('uses the selected color ANSI in the preview', () => {
+      const yellow = mod.COLORS.findIndex((c) => c.name === 'yellow');
+      const screen = mod.renderPicker({ index: yellow, sampleTopic: 'T' });
+      expect(screen).toContain('\x1b[33m◆ T');
+    });
+  });
+
+  describe('color/name consistency', () => {
+    it('every picker color is a valid named color', () => {
+      for (const c of mod.COLORS) expect(mod.validateColor(c.name)).toBe(true);
+    });
+  });
+
+  describe('runColorPicker', () => {
+    function fakeTty() {
+      const e = new EventEmitter();
+      e.isTTY = true;
+      e.setRawMode = () => {};
+      e.resume = () => {};
+      e.pause = () => {};
+      return e;
+    }
+    const sink = { write() {} };
+
+    it('resolves the selected color after navigation', async () => {
+      const input = fakeTty();
+      const p = mod.runColorPicker({ input, output: sink, initial: 'cyan' });
+      input.emit('data', Buffer.from('\x1b[B')); // cyan -> green
+      input.emit('data', Buffer.from('\x1b[B')); // green -> blue
+      input.emit('data', Buffer.from('\r'));
+      expect(await p).toBe('blue');
+    });
+
+    it('resolves null when cancelled', async () => {
+      const input = fakeTty();
+      const p = mod.runColorPicker({ input, output: sink, initial: 'yellow' });
+      input.emit('data', Buffer.from('\x1b'));
+      expect(await p).toBeNull();
+    });
+
+    it('resolves null without a TTY', async () => {
+      const input = new EventEmitter();
+      input.isTTY = false;
+      expect(await mod.runColorPicker({ input, output: sink })).toBeNull();
     });
   });
 });

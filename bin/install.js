@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
+const { runColorPicker } = require('./color-picker');
 
 // ─── ANSI helpers ────────────────────────────────────────────────────────────
 
@@ -169,18 +170,18 @@ function parseArgs(argv) {
             return result;
         }
         if (arg === '--color') {
-            if (i + 1 < args.length) {
-                const colorValue = args[i + 1];
-                if (!validateColor(colorValue)) {
-                    err(`Invalid color: "${colorValue}". Use a named color (${VALID_NAMED_COLORS.join(', ')}) or a numeric ANSI code (max 15 chars).`);
-                    process.exit(1);
-                }
-                result.color = colorValue;
-                i++;
-            } else {
-                err('--color requires a value (e.g., --color cyan)');
+            const next = args[i + 1];
+            // No value (or another flag next) → open the interactive picker.
+            if (next === undefined || next.startsWith('--')) {
+                result.action = 'color-picker';
+                continue;
+            }
+            if (!validateColor(next)) {
+                err(`Invalid color: "${next}". Use a named color (${VALID_NAMED_COLORS.join(', ')}) or a numeric ANSI code (max 15 chars).`);
                 process.exit(1);
             }
+            result.color = next;
+            i++;
             continue;
         }
         if (arg === '--voice') {
@@ -208,13 +209,15 @@ ${BOLD}claude-session-topics${RESET} — session topics for Claude Code
 
 ${BOLD}Usage:${RESET}
   npx @alexismunozdev/claude-session-topics            Install
+  npx @alexismunozdev/claude-session-topics --color       Pick color interactively
   npx @alexismunozdev/claude-session-topics --color cyan  Install with color
   npx @alexismunozdev/claude-session-topics --uninstall   Uninstall
 
 ${BOLD}Options:${RESET}
-  --color <name>   Set topic color (red, green, yellow, blue, magenta,
-                    cyan, white, orange, grey, none). Default: cyan
-                    (ANSI palette — adapts to light/dark terminal themes)
+  --color [name]   Set topic color (red, green, yellow, blue, magenta,
+                    cyan, white, orange, grey, none). Default: cyan.
+                    With no name, opens an interactive picker with a live
+                    status-bar preview (↑↓ to move, Enter/Space to choose).
   --uninstall      Remove scripts, settings, and skills (preserves topic data)
   --voice [lang]   Enable voice notifications when topic is detected
                     (default lang: en). Example: --voice es
@@ -236,7 +239,7 @@ ${BOLD}After install:${RESET}
 
 // ─── Install ─────────────────────────────────────────────────────────────────
 
-function install(color, voice, voiceLang, noVoice) {
+async function install(color, voice, voiceLang, noVoice) {
     heading('Installing claude-session-topics');
 
     // ── Step 1: Check deps ───────────────────────────────────────────────
@@ -489,6 +492,19 @@ function install(color, voice, voiceLang, noVoice) {
         }
     }
 
+    // ── Step 9.5: Offer the interactive color picker on first install ────
+    // Only when no --color was given, we're on a TTY, and no color is set yet
+    // (so upgrades don't re-prompt). Cancelling keeps the default (cyan).
+    if (!color && process.stdin.isTTY && !fs.existsSync(COLOR_CONFIG)) {
+        console.log('');
+        const chosen = await runColorPicker({ initial: 'cyan', project: path.basename(process.cwd()) });
+        if (chosen) {
+            fs.writeFileSync(COLOR_CONFIG, chosen, { encoding: 'utf8', mode: 0o600 });
+            ok(`Topic color set to: ${BOLD}${chosen}${RESET}`);
+            color = chosen;
+        }
+    }
+
     // ── Step 10: Summary ─────────────────────────────────────────────────
 
     console.log('');
@@ -646,7 +662,35 @@ function uninstall() {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-function main() {
+// Read the currently configured color (or null) for use as the picker default.
+function readCurrentColor() {
+    try {
+        const c = fs.readFileSync(COLOR_CONFIG, 'utf8').trim();
+        return c || null;
+    } catch {
+        return null;
+    }
+}
+
+async function pickAndSaveColor() {
+    if (!process.stdin.isTTY) {
+        info('No interactive terminal — run with a value, e.g. --color cyan');
+        return;
+    }
+    const chosen = await runColorPicker({
+        initial: readCurrentColor() || 'cyan',
+        project: path.basename(process.cwd()),
+    });
+    if (chosen) {
+        fs.writeFileSync(COLOR_CONFIG, chosen, { encoding: 'utf8', mode: 0o600 });
+        ok(`Topic color set to: ${BOLD}${chosen}${RESET}`);
+        info('Open a new session (or run /set-topic) to see it.');
+    } else {
+        info('No change — kept the current color.');
+    }
+}
+
+async function main() {
     const { action, color, voice, voiceLang, noVoice } = parseArgs(process.argv);
 
     switch (action) {
@@ -654,7 +698,10 @@ function main() {
             showHelp();
             break;
         case 'install':
-            install(color, voice, voiceLang, noVoice);
+            await install(color, voice, voiceLang, noVoice);
+            break;
+        case 'color-picker':
+            await pickAndSaveColor();
             break;
         case 'uninstall':
             uninstall();
@@ -674,4 +721,5 @@ module.exports = {
     validateColor,
     parseArgs,
     determineStatusLineCase,
+    ...require('./color-picker'),
 };

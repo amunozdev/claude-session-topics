@@ -84,9 +84,13 @@ Topic source precedence: `manual > custom-title > refined > heuristic > empty`.
 
 ## Customization
 
-By default the topic is bold cyan (ANSI palette, so it adapts to light/dark themes). Use `none` for no color. Three ways to change it:
+By default the topic is bold cyan (ANSI palette, so it adapts to light/dark themes). Use `none` for no color. Ways to change it:
 
-- Re-run with `--color <name>`:
+- Pick interactively (arrow keys + live status-bar preview):
+  ```bash
+  npx @alexismunozdev/claude-session-topics --color
+  ```
+- Set it directly with `--color <name>`:
   ```bash
   npx @alexismunozdev/claude-session-topics --color cyan
   ```

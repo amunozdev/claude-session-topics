@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.0] — 2026-06-01
+
+### Added
+- Interactive color picker: run `npx @alexismunozdev/claude-session-topics --color` (no value) to choose the topic color with arrow keys and a live status-bar preview — `↑↓` to move, `Enter`/`Space` to choose, `Esc` to cancel. A fresh install also offers the picker when run in an interactive terminal (skipped on non-TTY/CI, and on upgrades where a color is already set). Pure Node, no new dependencies.
+
 ## [5.1.1] — 2026-06-01
 
 ### Changed
