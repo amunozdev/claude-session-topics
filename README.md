@@ -10,6 +10,8 @@ Session topics for Claude Code. Auto-detect and display a topic in the statuslin
 npx @alexismunozdev/claude-session-topics
 ```
 
+On an interactive terminal this opens the color picker (arrow keys + live preview); press `Esc` to keep the current color. Skip it by passing `--color <name>`, or on non-interactive/CI runs.
+
 ## Voice notifications
 
 Get spoken alerts when Claude detects a new session topic — useful when multitasking across terminals.
