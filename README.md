@@ -16,7 +16,7 @@ npx @alexismunozdev/claude-session-topics
 npx @alexismunozdev/claude-session-topics --color cyan
 ```
 
-Supported colors: `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `orange` (default — Claude Code's `#D97757`), `grey`/`gray`. Raw ANSI codes are also accepted (e.g., `38;5;208`).
+By default the topic is bold cyan, drawn from the ANSI palette so it adapts to light and dark terminal themes. To change it, pass `--color <name>`. Supported colors: `red`, `green`, `yellow`, `blue`, `magenta`, `cyan` (default), `white`, `orange`, `grey`/`gray`, `none` (bold, no color). Raw ANSI codes are also accepted (e.g., `38;5;208`).
 
 ## Voice notifications
 
@@ -84,7 +84,7 @@ Topic source precedence: `manual > custom-title > refined > heuristic > empty`.
 
 ## Customization
 
-The default topic color is bold orange (Claude Code's `#D97757`). Three ways to change it:
+By default the topic is bold cyan (ANSI palette, so it adapts to light/dark themes). Use `none` for no color. Three ways to change it:
 
 - Re-run with `--color <name>`:
   ```bash

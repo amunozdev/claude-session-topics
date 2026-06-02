@@ -145,7 +145,7 @@ function hasJq() {
 
 // ─── CLI argument parsing ────────────────────────────────────────────────────
 
-const VALID_NAMED_COLORS = ['green', 'blue', 'cyan', 'magenta', 'yellow', 'red', 'white', 'orange', 'grey'];
+const VALID_NAMED_COLORS = ['green', 'blue', 'cyan', 'magenta', 'yellow', 'red', 'white', 'orange', 'grey', 'none'];
 const VALID_ANSI_CODE_RE = /^[0-9;]{1,15}$/;
 
 function validateColor(value) {
@@ -213,7 +213,8 @@ ${BOLD}Usage:${RESET}
 
 ${BOLD}Options:${RESET}
   --color <name>   Set topic color (red, green, yellow, blue, magenta,
-                    cyan, white, orange, grey). Default: orange
+                    cyan, white, orange, grey, none). Default: cyan
+                    (ANSI palette — adapts to light/dark terminal themes)
   --uninstall      Remove scripts, settings, and skills (preserves topic data)
   --voice [lang]   Enable voice notifications when topic is detected
                     (default lang: en). Example: --voice es

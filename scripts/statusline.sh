@@ -64,19 +64,20 @@ resolve_color() {
         magenta)   echo '\033[35m' ;;
         cyan)      echo '\033[36m' ;;
         white)     echo '\033[37m' ;;
-        orange)    echo '\033[38;2;217;119;87m' ;;
+        orange)    echo '\033[38;5;208m' ;;
         grey|gray) echo '\033[90m' ;;
-        "")        echo '\033[38;2;217;119;87m' ;;  # default: orange (Claude Code #D97757)
+        none)      echo '' ;;
+        "")        echo '\033[36m' ;;  # default: cyan (ANSI palette — adapts to terminal theme)
         *)
             if echo "$1" | grep -qE '^[0-9;]+$'; then
                 echo "\033[${1}m"
             else
-                echo '\033[38;2;217;119;87m'
+                echo '\033[36m'
             fi
             ;;
     esac
 }
-# Color priority: env var > config file > default (orange)
+# Color priority: env var > config file > default (cyan)
 _color="${CLAUDE_SESSION_TOPICS_COLOR:-}"
 if [ -z "$_color" ] && [ -f "$HOME/.claude/session-topics/.color-config" ]; then
     _color=$(cat "$HOME/.claude/session-topics/.color-config" 2>/dev/null || echo "")
