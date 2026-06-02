@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.1] — 2026-06-01
+
+### Fixed
+- `--color gray` (American spelling) was rejected by the installer even though the statusline resolved it — `gray` is now an accepted named color alongside `grey`.
+- Installer help and post-install summary still referenced the removed `auto-topic` skill and listed only the `Stop` hook. They now list just the `set-topic` skill and both hooks (`UserPromptSubmit` and `Stop`).
+
+### Docs
+- README documented a `--verbose` installer flag that does not exist; removed it (verbose logging is controlled via the `CLAUDE_SESSION_TOPICS_VERBOSE` env var).
+- Removed duplicated color and topic-source-precedence sections; clarified that background refinement re-runs every 3 turns when `refined` and every 5 turns when `custom-title`.
+
 ## [5.2.0] — 2026-06-01
 
 ### Added

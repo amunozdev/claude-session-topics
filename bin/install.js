@@ -146,7 +146,7 @@ function hasJq() {
 
 // ─── CLI argument parsing ────────────────────────────────────────────────────
 
-const VALID_NAMED_COLORS = ['green', 'blue', 'cyan', 'magenta', 'yellow', 'red', 'white', 'orange', 'grey', 'none'];
+const VALID_NAMED_COLORS = ['green', 'blue', 'cyan', 'magenta', 'yellow', 'red', 'white', 'orange', 'grey', 'gray', 'none'];
 const VALID_ANSI_CODE_RE = /^[0-9;]{1,15}$/;
 
 function validateColor(value) {
@@ -215,7 +215,7 @@ ${BOLD}Usage:${RESET}
 
 ${BOLD}Options:${RESET}
   --color [name]   Set topic color (red, green, yellow, blue, magenta,
-                    cyan, white, orange, grey, none). Default: cyan.
+                    cyan, white, orange, grey/gray, none). Default: cyan.
                     With no name, opens an interactive picker with a live
                     status-bar preview (↑↓ to move, Enter/Space to choose).
   --uninstall      Remove scripts, settings, and skills (preserves topic data)
@@ -225,11 +225,11 @@ ${BOLD}Options:${RESET}
   -h, --help       Show this help
 
 ${BOLD}What it does:${RESET}
-  - Copies statusline.sh to ~/.claude/session-topics/
+  - Copies statusline.sh and voice-notify.sh to ~/.claude/session-topics/
   - Configures statusLine in ~/.claude/settings.json
   - Adds Bash permission for session-topics commands
-  - Registers Stop hook for automatic topic detection
-  - Installs auto-topic and set-topic skills to ~/.claude/skills/
+  - Registers UserPromptSubmit and Stop hooks for automatic topic detection
+  - Installs the set-topic skill to ~/.claude/skills/
 
 ${BOLD}After install:${RESET}
   The statusline shows the current topic automatically.
@@ -510,9 +510,9 @@ async function install(color, voice, voiceLang, noVoice) {
     console.log('');
     heading('Installation complete');
     console.log(`  ${DIM}Statusline:${RESET}  ~/.claude/session-topics/statusline.sh`);
-    console.log(`  ${DIM}Skills:${RESET}      ~/.claude/skills/auto-topic/`);
-    console.log(`                ~/.claude/skills/set-topic/`);
-    console.log(`  ${DIM}Hook:${RESET}        Stop → auto-topic-hook.sh`);
+    console.log(`  ${DIM}Skills:${RESET}      ~/.claude/skills/set-topic/`);
+    console.log(`  ${DIM}Hooks:${RESET}       UserPromptSubmit → user-prompt-hook.sh`);
+    console.log(`                Stop → auto-topic-hook.sh`);
     console.log(`  ${DIM}Settings:${RESET}    ~/.claude/settings.json`);
     if (color) {
         console.log(`  ${DIM}Color:${RESET}       ${color}`);

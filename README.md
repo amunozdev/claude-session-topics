@@ -10,14 +10,6 @@ Session topics for Claude Code. Auto-detect and display a topic in the statuslin
 npx @alexismunozdev/claude-session-topics
 ```
 
-## With color
-
-```bash
-npx @alexismunozdev/claude-session-topics --color cyan
-```
-
-By default the topic is bold cyan, drawn from the ANSI palette so it adapts to light and dark terminal themes. To change it, pass `--color <name>`. Supported colors: `red`, `green`, `yellow`, `blue`, `magenta`, `cyan` (default), `white`, `orange`, `grey`/`gray`, `none` (bold, no color). Raw ANSI codes are also accepted (e.g., `38;5;208`).
-
 ## Voice notifications
 
 Get spoken alerts when Claude detects a new session topic — useful when multitasking across terminals.
@@ -62,8 +54,6 @@ npx @alexismunozdev/claude-session-topics --no-voice
 - Shows the topic in the Claude Code statusline (`◆ Topic`)
 - Composes with existing statusline plugins (doesn't overwrite)
 
-Topic source precedence: `manual > custom-title > refined > heuristic > empty`.
-
 ## What the installer configures
 
 1. Copies the statusline script to `~/.claude/session-topics/`
@@ -84,7 +74,7 @@ Topic source precedence: `manual > custom-title > refined > heuristic > empty`.
 
 ## Customization
 
-By default the topic is bold cyan (ANSI palette, so it adapts to light/dark themes). Use `none` for no color. Ways to change it:
+By default the topic is bold cyan, drawn from the ANSI palette so it adapts to light and dark terminal themes. Supported colors: `red`, `green`, `yellow`, `blue`, `magenta`, `cyan` (default), `white`, `orange`, `grey`/`gray`, `none` (bold, no color). Raw ANSI codes are also accepted (e.g., `38;5;208`). Ways to change it:
 
 - Pick interactively (arrow keys + live status-bar preview):
   ```bash
@@ -107,7 +97,7 @@ By default the topic is bold cyan (ANSI palette, so it adapts to light/dark them
 
 This package installs **one skill** (`set-topic`) and **two hooks** (`UserPromptSubmit`, `Stop`).
 
-- The `UserPromptSubmit` hook writes a topic synchronously via a bash heuristic (zero model tokens) and then spawns a background `claude -p --model haiku` call to refine it (one short headless call per user message, rate-limited to once every 15 seconds and only re-run every 3 turns when the topic is already `refined`).
+- The `UserPromptSubmit` hook writes a topic synchronously via a bash heuristic (zero model tokens) and then spawns a background `claude -p --model haiku` call to refine it (one short headless call per user message, rate-limited to once every 15 seconds and only re-run periodically — every 3 turns when the topic is already `refined`, every 5 turns when it's `custom-title`).
 - The `Stop` hook reads Claude Code's internal `custom-title` from the transcript JSONL — pure `jq` + `awk`, no model tokens.
 - The `set-topic` skill is a minimal stub used only when you invoke `/set-topic` explicitly.
 
@@ -169,12 +159,6 @@ Set the verbose environment variable:
 ```bash
 export CLAUDE_SESSION_TOPICS_VERBOSE=1
 # Then run your claude commands
-```
-
-Or use the --verbose flag with the installer:
-
-```bash
-npx @alexismunozdev/claude-session-topics --verbose
 ```
 
 ### View Debug Logs
