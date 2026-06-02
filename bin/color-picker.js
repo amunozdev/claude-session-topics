@@ -62,7 +62,7 @@ function visualRowCount(screen, cols) {
 function renderPicker(state) {
     const { index, sampleTopic = 'Deploy auth', model = 'Opus 4.8', project = 'my-project' } = state;
     const lines = [];
-    lines.push(`${BOLD}Elegí el color del topic${RESET}  ${DIM}(↑↓ mover · Enter/Espacio elegir · Esc cancelar)${RESET}`);
+    lines.push(`${BOLD}Choose the topic color${RESET}  ${DIM}(↑↓ move · Enter/Space select · Esc cancel)${RESET}`);
     lines.push('');
     for (let i = 0; i < COLORS.length; i++) {
         const { name, ansi } = COLORS[i];
