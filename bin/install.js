@@ -492,12 +492,16 @@ async function install(color, voice, voiceLang, noVoice) {
         }
     }
 
-    // ── Step 9.5: Offer the interactive color picker on first install ────
-    // Only when no --color was given, we're on a TTY, and no color is set yet
-    // (so upgrades don't re-prompt). Cancelling keeps the default (cyan).
-    if (!color && process.stdin.isTTY && !fs.existsSync(COLOR_CONFIG)) {
+    // ── Step 9.5: Offer the interactive color picker on install ──────────
+    // Whenever no --color was given and we're on an interactive terminal, open
+    // the picker pre-selected to the current color (default cyan). Cancelling
+    // (Esc) keeps whatever is already set. Skipped on non-TTY/CI.
+    if (!color && process.stdin.isTTY) {
+        const current = fs.existsSync(COLOR_CONFIG)
+            ? fs.readFileSync(COLOR_CONFIG, 'utf8').trim()
+            : 'cyan';
         console.log('');
-        const chosen = await runColorPicker({ initial: 'cyan', project: path.basename(process.cwd()) });
+        const chosen = await runColorPicker({ initial: current, project: path.basename(process.cwd()) });
         if (chosen) {
             fs.writeFileSync(COLOR_CONFIG, chosen, { encoding: 'utf8', mode: 0o600 });
             ok(`Topic color set to: ${BOLD}${chosen}${RESET}`);
