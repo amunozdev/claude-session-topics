@@ -11,6 +11,7 @@ const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
 const { runColorPicker } = require('./color-picker');
+const { runVoicePicker, isVoiceAvailable } = require('./voice-picker');
 
 // ─── ANSI helpers ────────────────────────────────────────────────────────────
 
@@ -185,10 +186,15 @@ function parseArgs(argv) {
             continue;
         }
         if (arg === '--voice') {
-            result.voice = true;
-            if (i + 1 < args.length && /^[a-z]{2}(-[a-zA-Z]{2,})?$/.test(args[i + 1])) {
-                result.voiceLang = args[i + 1];
+            const next = args[i + 1];
+            // With a language value → non-interactive enable. With no value (or
+            // another flag next) → open the interactive voice picker.
+            if (next !== undefined && /^[a-z]{2}(-[a-zA-Z]{2,})?$/.test(next)) {
+                result.voice = true;
+                result.voiceLang = next;
                 i++;
+            } else {
+                result.action = 'voice-picker';
             }
             continue;
         }
@@ -211,6 +217,7 @@ ${BOLD}Usage:${RESET}
   npx @alexismunozdev/claude-session-topics            Install
   npx @alexismunozdev/claude-session-topics --color       Pick color interactively
   npx @alexismunozdev/claude-session-topics --color cyan  Install with color
+  npx @alexismunozdev/claude-session-topics --voice       Pick voice interactively
   npx @alexismunozdev/claude-session-topics --uninstall   Uninstall
 
 ${BOLD}Options:${RESET}
@@ -219,8 +226,10 @@ ${BOLD}Options:${RESET}
                     With no name, opens an interactive picker with a live
                     status-bar preview (↑↓ to move, Enter/Space to choose).
   --uninstall      Remove scripts, settings, and skills (preserves topic data)
-  --voice [lang]   Enable voice notifications when topic is detected
-                    (default lang: en). Example: --voice es
+  --voice [lang]   Enable voice notifications spoken when a task finishes.
+                    With no language, opens an interactive picker that plays
+                    each voice out loud (↑↓ to hear, Enter/Space to choose).
+                    With a language, enables it directly. Example: --voice es
   --no-voice       Disable voice notifications
   -h, --help       Show this help
 
@@ -509,6 +518,32 @@ async function install(color, voice, voiceLang, noVoice) {
         }
     }
 
+    // ── Step 9.6: Offer the interactive voice picker on install ──────────
+    // When neither --voice nor --no-voice was given and we're on an interactive
+    // terminal with a TTS engine available, open the picker pre-selected to the
+    // current voice. Moving the selection plays each voice out loud; Esc keeps
+    // the current one. Without a TTS engine we say so and skip — no dead picker.
+    let voiceLabel = null;
+    if (!voice && !noVoice && process.stdin.isTTY) {
+        if (!isVoiceAvailable()) {
+            info('No text-to-speech engine found on this device — skipping voice setup.');
+        } else {
+            console.log('');
+            const chosenVoice = await runVoicePicker({ initial: readCurrentVoice() });
+            if (chosenVoice) {
+                writeVoiceConfig(chosenVoice);
+                if (chosenVoice.name !== 'off') {
+                    voiceLabel = chosenVoice.lang
+                        ? `${chosenVoice.label} (${chosenVoice.lang})`
+                        : chosenVoice.label;
+                    ok(`Notification voice set to: ${BOLD}${voiceLabel}${RESET}`);
+                } else {
+                    ok('Voice notifications disabled');
+                }
+            }
+        }
+    }
+
     // ── Step 10: Summary ─────────────────────────────────────────────────
 
     console.log('');
@@ -520,6 +555,9 @@ async function install(color, voice, voiceLang, noVoice) {
     console.log(`  ${DIM}Settings:${RESET}    ~/.claude/settings.json`);
     if (color) {
         console.log(`  ${DIM}Color:${RESET}       ${color}`);
+    }
+    if (voiceLabel) {
+        console.log(`  ${DIM}Voice:${RESET}       ${voiceLabel}`);
     }
     console.log('');
     console.log(`  Topics are set automatically. Use ${CYAN}/set-topic <text>${RESET} to override.`);
@@ -694,6 +732,60 @@ async function pickAndSaveColor() {
     }
 }
 
+// Read the currently configured voice id (VOICE_NAME) to pre-select the picker,
+// or '' (→ Off) when disabled / unset.
+function readCurrentVoice() {
+    try {
+        const raw = fs.readFileSync(VOICE_CONFIG, 'utf8');
+        if (!/^VOICE_ENABLED=1\s*$/m.test(raw)) return '';
+        const m = raw.match(/^VOICE_NAME=(.*)$/m);
+        return m ? m[1].trim() : '';
+    } catch {
+        return '';
+    }
+}
+
+// Persist a picked voice entry to .voice-config. `off` disables the announcement;
+// an explicit voice stores its real id and locks the language (VOICE_AUTO_LANG=0)
+// so the preview matches what gets spoken on task completion.
+function writeVoiceConfig(entry) {
+    const enabled = entry && entry.name !== 'off' ? 1 : 0;
+    const configContent = [
+        '# Voice notification config for claude-session-topics',
+        `VOICE_ENABLED=${enabled}`,
+        `VOICE_LANG=${(entry && entry.lang) || 'en'}`,
+        `VOICE_NAME=${(entry && entry.id) || ''}`,
+        'VOICE_TEMPLATE=',
+        `VOICE_AUTO_LANG=${enabled ? 0 : 1}`,
+        'VOICE_MUTED=0',
+    ].join('\n') + '\n';
+    fs.writeFileSync(VOICE_CONFIG, configContent, { encoding: 'utf8', mode: 0o644 });
+}
+
+async function pickAndSaveVoice() {
+    if (!process.stdin.isTTY) {
+        info('No interactive terminal — run with a language, e.g. --voice es');
+        return;
+    }
+    if (!isVoiceAvailable()) {
+        warn('No text-to-speech engine found on this device.');
+        info('On Linux, install one (e.g. sudo apt install espeak-ng) and re-run.');
+        return;
+    }
+    const chosen = await runVoicePicker({ initial: readCurrentVoice() });
+    if (chosen) {
+        writeVoiceConfig(chosen);
+        if (chosen.name !== 'off') {
+            const tag = chosen.lang ? ` (${chosen.lang})` : '';
+            ok(`Notification voice set to: ${BOLD}${chosen.label}${RESET}${tag}`);
+        } else {
+            ok('Voice notifications disabled');
+        }
+    } else {
+        info('No change — kept the current voice.');
+    }
+}
+
 async function main() {
     const { action, color, voice, voiceLang, noVoice } = parseArgs(process.argv);
 
@@ -706,6 +798,9 @@ async function main() {
             break;
         case 'color-picker':
             await pickAndSaveColor();
+            break;
+        case 'voice-picker':
+            await pickAndSaveVoice();
             break;
         case 'uninstall':
             uninstall();
@@ -726,4 +821,5 @@ module.exports = {
     parseArgs,
     determineStatusLineCase,
     ...require('./color-picker'),
+    voicePicker: require('./voice-picker'),
 };
