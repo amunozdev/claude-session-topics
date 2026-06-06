@@ -66,8 +66,8 @@ for skill_dir in $SKILL_DIRS; do
         continue
     fi
     
-    # Extract version from frontmatter (YAML format: version: x.y.z)
-    skill_version=$(grep -E '^version:\s*' "$skill_file" | head -n1 | awk '{print $2}')
+    # Extract version from frontmatter (YAML format: version: x.y.z or "x.y.z")
+    skill_version=$(grep -E '^version:\s*' "$skill_file" | head -n1 | sed -E 's/^version:[[:space:]]*//; s/["'\'']//g')
     
     if [ -z "$skill_version" ]; then
         echo -e "${YELLOW}⚠️  ${skill_name}: No version found in frontmatter${NC}"
