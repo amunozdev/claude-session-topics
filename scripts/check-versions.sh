@@ -91,6 +91,6 @@ if [ $DISCREPANCIES -eq 0 ]; then
 else
     echo -e "${RED}✗ Found ${DISCREPANCIES} skill(s) with version greater than package.json${NC}"
     echo ""
-    echo "Run 'npm run version:sync' to synchronize versions"
+    echo "Run 'pnpm run version:sync' to synchronize versions"
     exit 1
 fi

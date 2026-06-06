@@ -36,16 +36,16 @@ else
 fi
 
 # Check JavaScript with ESLint
-if command -v npx &> /dev/null; then
-    if ! run_check "JavaScript (ESLint)" "npx eslint bin/install.js"; then
-        echo "    Run: npx eslint bin/install.js"
+if command -v pnpm &> /dev/null; then
+    if ! run_check "JavaScript (ESLint)" "pnpm exec eslint bin/install.js"; then
+        echo "    Run: pnpm exec eslint bin/install.js"
         FAILED=1
     fi
 fi
 
 # Check version consistency
-if ! run_check "Version consistency" "npm run version:check"; then
-    echo "    Run: npm run version:sync to fix"
+if ! run_check "Version consistency" "pnpm run version:check"; then
+    echo "    Run: pnpm run version:sync to fix"
     FAILED=1
 fi
 

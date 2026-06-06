@@ -12,8 +12,14 @@
     "test:watch": "vitest",
     "version:check": "bash scripts/check-versions.sh",
     "version:sync": "node scripts/sync-versions.js",
-    "lint": "shellcheck scripts/*.sh --severity=warning && npx eslint bin/install.js",
+    "lint": "shellcheck scripts/*.sh --severity=warning && eslint bin/install.js",
     "diagnose": "bash scripts/diagnose.sh"
+  },
+  "packageManager": "pnpm@10.29.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "devDependencies": {
     "@vitest/ui": "^1.6.1",

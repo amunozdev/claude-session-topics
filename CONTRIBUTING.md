@@ -4,14 +4,14 @@
 
 ### Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 18+ and pnpm
 - Bash 4.0+
 - jq
 
 ### Install Dependencies
 
 ```bash
-npm install
+pnpm install
 
 # Optional: development tools
 brew install shellcheck bats-core  # macOS
@@ -31,8 +31,8 @@ git config core.hooksPath .githooks
 
 # Individual suites
 bats tests/integration/
-npm test
-npm run lint
+pnpm test
+pnpm lint
 ```
 
 ## Release Process
@@ -40,8 +40,8 @@ npm run lint
 Releases are automated via GitHub Actions when you push a tag:
 
 ```bash
-npm version patch  # or minor, major
-npm run version:sync
+pnpm version patch  # or minor, major
+pnpm run version:sync
 git add .
 git commit -m "chore: bump version to x.x.x"
 git tag v$(node -p "require('./package.json').version")
