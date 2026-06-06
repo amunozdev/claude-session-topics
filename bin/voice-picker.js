@@ -89,11 +89,37 @@ function buildMessage(lang, topic) {
     return MESSAGES[key].replace('{topic}', topic);
 }
 
-// Assemble the picker list: Off + the device's real voices, sorted by language
-// then name. If the engine exists but enumerates nothing (e.g. spd-say only),
-// offer a single "System default voice" so the user can still enable it. Impure
-// (calls the provider); provider injectable for testing.
-function getVoices(provider = getProvider()) {
+// Devices ship dozens of voices across 40+ languages; most users only want a
+// few. Show these languages up front and tuck the rest behind a toggle.
+const PRIMARY_LANGS = ['en', 'es', 'pt'];
+
+function isPrimaryLang(lang) {
+    return PRIMARY_LANGS.includes(String(lang || '').slice(0, 2).toLowerCase());
+}
+
+// macOS novelty/legacy voice base names. The good ones are already surfaced as
+// personality presets; the rest are noise for everyday use, so they go behind
+// the toggle. Matched by base name so multilingual variants like
+// "Eddy (English (UK))" are caught too. No-ops on Windows/Linux (different names).
+const NOVELTY_VOICES = new Set([
+    'Albert', 'Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 'Cellos', 'Deranged',
+    'Fred', 'Good News', 'Hysterical', 'Jester', 'Junior', 'Kathy', 'Organ',
+    'Pipe Organ', 'Princess', 'Ralph', 'Superstar', 'Trinoids', 'Whisper', 'Wobble',
+    'Zarvox', 'Bruce', 'Agnes', 'Vicki', 'Victoria',
+    'Eddy', 'Flo', 'Grandma', 'Grandpa', 'Reed', 'Rocko', 'Sandy', 'Shelley',
+]);
+
+function isNoveltyVoice(id) {
+    const base = String(id || '').split(' (')[0].trim();
+    return NOVELTY_VOICES.has(base) || NOVELTY_VOICES.has(String(id));
+}
+
+// Assemble the picker list: Off + personality presets + the device's real voices
+// in the primary languages (English/Spanish/Portuguese), then a "🌐 More
+// languages" toggle that reveals every other language on demand. If the engine
+// enumerates nothing (e.g. spd-say) or has no primary-language voices, the full
+// list is shown without a toggle. Impure (calls the provider); injectable.
+function getVoices(provider = getProvider(), opts = {}) {
     const raw = provider.listVoices();
     let voices = raw.map((v) => ({
         name: v.id || v.label,
@@ -105,7 +131,25 @@ function getVoices(provider = getProvider()) {
     if (voices.length === 0 && provider.isAvailable()) {
         voices = [{ name: 'default', label: 'System default voice', id: '', lang: '' }];
     }
-    return [OFF, ...resolvePresets(provider, raw), ...voices];
+    const presets = resolvePresets(provider, raw);
+    const presetIds = new Set(presets.map((p) => p.id));
+    // Drop voices already surfaced as a personality preset (no duplicates).
+    voices = voices.filter((v) => !presetIds.has(v.id));
+    const head = [OFF, ...presets];
+    // Up front: real voices in the primary languages. Hidden: everything else
+    // (other languages + macOS novelty/legacy voices).
+    const upFront = (v) => isPrimaryLang(v.lang) && !isNoveltyVoice(v.id);
+    const primary = voices.filter(upFront);
+    const others = voices.filter((v) => !upFront(v));
+    if (others.length === 0 || primary.length === 0) {
+        return [...head, ...voices];
+    }
+    if (opts.expanded) {
+        const less = { name: 'less', label: '🌐 Hide extra voices', id: '', lang: '', toggle: true };
+        return [...head, ...primary, less, ...others];
+    }
+    const more = { name: 'more', label: `🌐 More voices (${others.length})`, id: '', lang: '', toggle: true };
+    return [...head, ...primary, more];
 }
 
 // Is any TTS engine available on this device? Gates whether to open the picker.
@@ -161,8 +205,12 @@ function renderPicker(state) {
     lines.push('');
     if (start > 0) lines.push(`   ${DIM}↑ ${start} more${RESET}`);
     for (let i = start; i < end; i++) {
-        const { label, lang } = voices[i];
+        const { label, lang, toggle } = voices[i];
         const pointer = i === index ? '❱' : ' ';
+        if (toggle) {
+            lines.push(` ${pointer} ${DIM}${label}${RESET}`);
+            continue;
+        }
         const tag = lang ? `  ${DIM}(${lang})${RESET}` : '';
         lines.push(` ${pointer} ${BOLD}◆ ${label}${RESET}${tag}`);
     }
@@ -175,7 +223,7 @@ function renderPicker(state) {
 // Speak the announcement for an entry. Side-effecting; returns the spawned child
 // (or null). `off` speaks nothing. provider/spawn injectable for testing.
 function speak(entry, opts = {}) {
-    if (!entry || entry.name === 'off') return null;
+    if (!entry || entry.toggle || entry.name === 'off') return null;
     const provider = opts.provider || getProvider();
     const message = buildMessage(entry.lang, opts.sampleTopic || 'Deploy auth');
     const spawnFn = opts.spawn || spawn;
@@ -194,16 +242,28 @@ function speak(entry, opts = {}) {
 function runVoicePicker(opts = {}) {
     const input = opts.input || process.stdin;
     const output = opts.output || process.stdout;
-    const speakFn = opts.speak || speak;
-    const voices = opts.voices || getVoices();
 
     if (!input.isTTY) {
         return Promise.resolve(null);
     }
 
+    const speakFn = opts.speak || speak;
+    const provider = opts.provider || getProvider();
+    const injected = !!opts.voices;
+    let expanded = false;
+    const build = () => (injected ? opts.voices : getVoices(provider, { expanded }));
+    let voices = build();
+
     const maxRows = opts.maxRows || Math.max(4, (output.rows || 24) - 7);
 
-    let index = voices.findIndex((v) => v.id === opts.initial);
+    let index = voices.findIndex((v) => !v.toggle && v.id === opts.initial);
+    // If the saved voice lives in the hidden "other languages" section, open
+    // expanded so it shows up pre-selected.
+    if (index < 0 && !injected) {
+        expanded = true;
+        voices = build();
+        index = voices.findIndex((v) => !v.toggle && v.id === opts.initial);
+    }
     if (index < 0) index = 0;
 
     const HIDE_CURSOR = '\x1b[?25l';
@@ -246,6 +306,16 @@ function runVoicePicker(opts = {}) {
             const next = reduceKey({ index, voices }, key);
             index = next.index;
             if (next.action === 'select') {
+                const cur = voices[index];
+                if (cur && cur.toggle && !injected) {
+                    expanded = !expanded;
+                    voices = build();
+                    const ti = voices.findIndex((v) => v.toggle);
+                    index = ti >= 0 ? ti : Math.min(index, voices.length - 1);
+                    killAudio();
+                    draw();
+                    return;
+                }
                 cleanup();
                 const { name, label, id, lang } = voices[index];
                 resolve({ name, label, id, lang });

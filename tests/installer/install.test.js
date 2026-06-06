@@ -742,22 +742,73 @@ describe('Interactive voice picker', () => {
       expect(v.map((x) => x.name)).toEqual(['off', 'default']);
     });
 
-    it('prepends personality presets (after Off, before raw voices) on macOS', () => {
+    it('prepends personality presets and does not duplicate their raw voice', () => {
       const provider = {
         platform: 'darwin',
         isAvailable: () => true,
         listVoices: () => [
           { id: 'Zarvox', label: 'Zarvox', lang: 'en_US' },
-          { id: 'Bad News', label: 'Bad News', lang: 'en_US' },
+          { id: 'Samantha', label: 'Samantha', lang: 'en_US' },
         ],
       };
       const v = vp.getVoices(provider);
       expect(v[0].name).toBe('off');
       expect(v[1].name).toBe('preset:robot');
-      expect(v[1].label).toContain('Robot');
       expect(v[1].id).toBe('Zarvox');
-      // raw voices still listed after the presets
-      expect(v.some((x) => x.name === 'Zarvox')).toBe(true);
+      // Zarvox is surfaced as the preset, not duplicated as a raw row
+      expect(v.some((x) => x.name === 'Zarvox')).toBe(false);
+      // a real non-preset voice still appears up front
+      expect(v.some((x) => x.id === 'Samantha')).toBe(true);
+    });
+
+    it('keeps primary-language voices up front and hides the rest behind a toggle', () => {
+      const provider = {
+        platform: 'darwin',
+        isAvailable: () => true,
+        listVoices: () => [
+          { id: 'Samantha', label: 'Samantha', lang: 'en_US' },
+          { id: 'Mónica', label: 'Mónica', lang: 'es_ES' },
+          { id: 'Thomas', label: 'Thomas', lang: 'fr_FR' },
+          { id: 'Kyoko', label: 'Kyoko', lang: 'ja_JP' },
+        ],
+      };
+      const v = vp.getVoices(provider);
+      const ids = v.map((x) => x.id);
+      expect(ids).toContain('Samantha');
+      expect(ids).toContain('Mónica');
+      expect(ids).not.toContain('Thomas'); // non-primary hidden
+      expect(ids).not.toContain('Kyoko');
+      const toggle = v.find((x) => x.toggle);
+      expect(toggle.label).toContain('More voices (2)');
+    });
+
+    it('reveals the hidden voices when expanded', () => {
+      const provider = {
+        platform: 'darwin',
+        isAvailable: () => true,
+        listVoices: () => [
+          { id: 'Samantha', label: 'Samantha', lang: 'en_US' },
+          { id: 'Thomas', label: 'Thomas', lang: 'fr_FR' },
+        ],
+      };
+      const v = vp.getVoices(provider, { expanded: true });
+      const ids = v.map((x) => x.id);
+      expect(ids).toContain('Thomas');
+      expect(v.find((x) => x.toggle).label).toContain('Hide');
+    });
+
+    it('hides macOS novelty/legacy voices even though they are English', () => {
+      const provider = {
+        platform: 'darwin',
+        isAvailable: () => true,
+        listVoices: () => [
+          { id: 'Samantha', label: 'Samantha', lang: 'en_US' },
+          { id: 'Albert', label: 'Albert', lang: 'en_US' },
+          { id: 'Eddy (English (UK))', label: 'Eddy (English (UK))', lang: 'en_GB' },
+        ],
+      };
+      const upFrontIds = vp.getVoices(provider).filter((x) => !x.toggle && !x.name.startsWith('preset:') && x.name !== 'off').map((x) => x.id);
+      expect(upFrontIds).toEqual(['Samantha']);
     });
   });
 
@@ -898,6 +949,41 @@ describe('Interactive voice picker', () => {
       const input = new EventEmitter();
       input.isTTY = false;
       expect(await vp.runVoicePicker({ input, output: sink, speak: () => null, voices: sampleVoices })).toBeNull();
+    });
+
+    it('expands hidden voices via the toggle and selects one', async () => {
+      const input = fakeTty();
+      const provider = {
+        platform: 'darwin',
+        isAvailable: () => true,
+        listVoices: () => [
+          { id: 'Samantha', label: 'Samantha', lang: 'en_US' },
+          { id: 'Thomas', label: 'Thomas', lang: 'fr_FR' },
+        ],
+      };
+      // collapsed: [Off, Samantha, More-toggle]
+      const p = vp.runVoicePicker({ input, output: sink, provider, speak: () => null, initial: '' });
+      input.emit('data', Buffer.from('\x1b[B')); // Off -> Samantha
+      input.emit('data', Buffer.from('\x1b[B')); // Samantha -> More toggle
+      input.emit('data', Buffer.from('\r'));     // toggle: expand (does not resolve)
+      input.emit('data', Buffer.from('\x1b[B')); // Hide-toggle -> Thomas
+      input.emit('data', Buffer.from('\r'));     // select Thomas
+      expect((await p).id).toBe('Thomas');
+    });
+
+    it('opens expanded when the saved voice lives in the hidden section', async () => {
+      const input = fakeTty();
+      const provider = {
+        platform: 'darwin',
+        isAvailable: () => true,
+        listVoices: () => [
+          { id: 'Samantha', label: 'Samantha', lang: 'en_US' },
+          { id: 'Thomas', label: 'Thomas', lang: 'fr_FR' },
+        ],
+      };
+      const p = vp.runVoicePicker({ input, output: sink, provider, speak: () => null, initial: 'Thomas' });
+      input.emit('data', Buffer.from('\r')); // already on Thomas
+      expect((await p).id).toBe('Thomas');
     });
   });
 });
