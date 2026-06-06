@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.2] — 2026-06-06
+
+### Fixed
+- Topic no longer shows the literal `Error: Reached max turns 1` when MCP servers are configured. The async `claude -p` refinement now runs with `--strict-mcp-config` and no tools, so the single allowed turn can't be consumed by a tool call. The call also uses `--output-format json` and only accepts `.result` when `is_error` is false, with a guard that discards any leftover CLI error string so the heuristic topic is kept instead.
+
 ## [5.2.4] — 2026-06-01
 
 ### Docs

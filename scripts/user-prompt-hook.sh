@@ -279,10 +279,26 @@ refine_topic() {
   full_prompt=$(printf '%s\n\nConversación:\n%s' "$instruction" "$context")
 
   local refined out_file="${TOPIC_FILE}.refine.$$"
+  # --strict-mcp-config + --allowedTools "" load zero MCP servers and no tools,
+  # so the model can't burn the single turn on a tool call (which would make the
+  # CLI emit "Error: Reached max turns 1" to stdout and get written as the topic).
+  # --output-format json lets us accept the result only when is_error is false.
   printf '%s' "$full_prompt" | CLAUDE_SESSION_TOPICS_SKIP=1 \
-    run_with_timeout 30 claude -p --model haiku --max-turns 1 >"$out_file" 2>/dev/null || true
-  refined=$(tr -d '\r' < "$out_file" 2>/dev/null | grep -v '^[[:space:]]*$' | head -n 1 || true)
+    run_with_timeout 30 claude -p --model haiku --max-turns 1 \
+      --strict-mcp-config --allowedTools "" --output-format json >"$out_file" 2>/dev/null || true
+  if command -v jq >/dev/null 2>&1; then
+    refined=$(jq -r 'select(.is_error == false) | .result // empty' "$out_file" 2>/dev/null \
+              | grep -v '^[[:space:]]*$' | head -n 1 || true)
+  else
+    refined=$(tr -d '\r' < "$out_file" 2>/dev/null | grep -v '^[[:space:]]*$' | head -n 1 || true)
+  fi
   rm -f "$out_file"
+
+  # Guard: never let a CLI error string become the topic (belt-and-suspenders for
+  # the jq-less path or unexpected error formats).
+  case "$refined" in
+    Error:*|*"Reached max turns"*|*"Execution error"*) refined="" ;;
+  esac
 
   # Sanitize: strip quotes, trim, whitelist chars, truncate
   refined=$(printf '%s' "$refined" \
