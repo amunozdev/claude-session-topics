@@ -27,49 +27,68 @@ else
     EFFECTIVE_LANG="${VOICE_LANG:-en}"
 fi
 
-# Build message: explicit template overrides, otherwise auto-select by language
+# Build message: explicit template overrides, otherwise localize by language.
+# Keep this map in sync with MESSAGES in bin/voice-picker.js.
 if [ -n "$VOICE_TEMPLATE" ]; then
     MESSAGE="${VOICE_TEMPLATE//\{topic\}/$TOPIC}"
 else
-    case "$EFFECTIVE_LANG" in
-        es*) MESSAGE="Tarea terminada: $TOPIC" ;;
-        *)   MESSAGE="Done: $TOPIC" ;;
+    lang_lc=$(printf '%s' "$EFFECTIVE_LANG" | tr '[:upper:]' '[:lower:]')
+    case "$lang_lc" in
+        es*)            MESSAGE="Tarea terminada: $TOPIC" ;;
+        pt*)            MESSAGE="Tarefa concluída: $TOPIC" ;;
+        fr*)            MESSAGE="Tâche terminée : $TOPIC" ;;
+        de*)            MESSAGE="Aufgabe erledigt: $TOPIC" ;;
+        it*)            MESSAGE="Attività completata: $TOPIC" ;;
+        nl*)            MESSAGE="Taak voltooid: $TOPIC" ;;
+        ja*)            MESSAGE="タスク完了: $TOPIC" ;;
+        ko*)            MESSAGE="작업 완료: $TOPIC" ;;
+        ru*)            MESSAGE="Задача выполнена: $TOPIC" ;;
+        zh*|cmn*|yue*)  MESSAGE="任务完成：$TOPIC" ;;
+        *)              MESSAGE="Done: $TOPIC" ;;
     esac
 fi
 
 speak_macos() {
-  local voice_flag=""
   if [[ -n "$VOICE_NAME" ]]; then
-    voice_flag="-v $VOICE_NAME"
+    say -v "$VOICE_NAME" "$MESSAGE" &
   else
     case "$EFFECTIVE_LANG" in
-      es*) voice_flag="-v Mónica" ;;
-      *)   voice_flag="" ;;
+      es*) say -v "Mónica" "$MESSAGE" & ;;
+      *)   say "$MESSAGE" & ;;
     esac
-  fi
-  if [[ -n "$voice_flag" ]]; then
-    # shellcheck disable=SC2086
-    say $voice_flag "$MESSAGE" &
-  else
-    say "$MESSAGE" &
   fi
 }
 
 speak_linux() {
-  if command -v espeak &>/dev/null; then
-    espeak -v "$EFFECTIVE_LANG" "$MESSAGE" &
-  elif command -v espeak-ng &>/dev/null; then
-    espeak-ng -v "$EFFECTIVE_LANG" "$MESSAGE" &
+  local engine=""
+  if command -v espeak-ng &>/dev/null; then
+    engine="espeak-ng"
+  elif command -v espeak &>/dev/null; then
+    engine="espeak"
+  fi
+  if [[ -n "$engine" ]]; then
+    if [[ -n "$VOICE_NAME" ]]; then
+      "$engine" -v "$VOICE_NAME" "$MESSAGE" &
+    else
+      "$engine" -v "$EFFECTIVE_LANG" "$MESSAGE" &
+    fi
   elif command -v spd-say &>/dev/null; then
     spd-say "$MESSAGE" &
   fi
 }
 
 speak_windows() {
-  powershell.exe -Command "
+  local sel=""
+  if [[ -n "$VOICE_NAME" ]]; then
+    local name_esc=${VOICE_NAME//\'/\'\'}
+    sel="\$s.SelectVoice('${name_esc}');"
+  fi
+  local msg_esc=${MESSAGE//\'/\'\'}
+  powershell.exe -NoProfile -Command "
     Add-Type -AssemblyName System.Speech;
     \$s = New-Object System.Speech.Synthesis.SpeechSynthesizer;
-    \$s.Speak('$MESSAGE')
+    ${sel}
+    \$s.Speak('${msg_esc}')
   " &
 }
 
