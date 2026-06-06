@@ -468,10 +468,10 @@ describe('Installer Pure Functions', () => {
       parseArgs = mod.parseArgs;
     });
 
-    it('--voice without lang defaults to en', () => {
+    it('--voice without lang opens the interactive voice picker', () => {
       const result = parseArgs(['node', 'install.js', '--voice']);
-      expect(result.voice).toBe(true);
-      expect(result.voiceLang).toBe('en');
+      expect(result.action).toBe('voice-picker');
+      expect(result.voice).toBe(false);
     });
 
     it('--voice es sets voiceLang to es', () => {
@@ -492,10 +492,10 @@ describe('Installer Pure Functions', () => {
       expect(result.voiceLang).toBe('en');
     });
 
-    it('--voice --color cyan does not consume --color as lang', () => {
+    it('--voice --color cyan opens the voice picker and does not consume --color as lang', () => {
       const result = parseArgs(['node', 'install.js', '--voice', '--color', 'cyan']);
-      expect(result.voice).toBe(true);
-      expect(result.voiceLang).toBe('en');
+      expect(result.action).toBe('voice-picker');
+      expect(result.voice).toBe(false);
       expect(result.color).toBe('cyan');
     });
 
@@ -531,10 +531,9 @@ describe('Installer Pure Functions', () => {
       expect(result.voice).toBe(false);
     });
 
-    it('--no-voice with --voice uses noVoice', () => {
+    it('--no-voice with --voice keeps noVoice set', () => {
       const result = parseArgs(['node', 'install.js', '--no-voice', '--voice']);
       expect(result.noVoice).toBe(true);
-      expect(result.voice).toBe(true);
     });
   });
 
@@ -585,9 +584,9 @@ describe('Interactive color picker', () => {
     });
 
     it('opens the picker when --color is followed by another flag', () => {
-      const r = mod.parseArgs(['node', 'install.js', '--color', '--voice']);
+      const r = mod.parseArgs(['node', 'install.js', '--color', '--no-voice']);
       expect(r.action).toBe('color-picker');
-      expect(r.voice).toBe(true);
+      expect(r.noVoice).toBe(true);
     });
 
     it('sets the color directly when --color has a valid value', () => {
@@ -668,6 +667,237 @@ describe('Interactive color picker', () => {
       const input = new EventEmitter();
       input.isTTY = false;
       expect(await mod.runColorPicker({ input, output: sink })).toBeNull();
+    });
+  });
+});
+
+describe('Interactive voice picker', () => {
+  let vp;
+  beforeEach(async () => {
+    const mod = await import('../../bin/install.js');
+    vp = mod.voicePicker;
+  });
+
+  describe('parseArgs --voice', () => {
+    let parseArgs;
+    beforeEach(async () => {
+      const mod = await import('../../bin/install.js');
+      parseArgs = mod.parseArgs;
+    });
+
+    it('opens the picker when --voice has no value', () => {
+      expect(parseArgs(['node', 'install.js', '--voice']).action).toBe('voice-picker');
+    });
+
+    it('enables directly (non-interactive) when --voice has a language', () => {
+      const r = parseArgs(['node', 'install.js', '--voice', 'es']);
+      expect(r.action).toBe('install');
+      expect(r.voice).toBe(true);
+      expect(r.voiceLang).toBe('es');
+    });
+  });
+
+  // A fake voice list standing in for whatever the device enumerates.
+  const off = { name: 'off', label: 'Off (no voice)', id: '', lang: '' };
+  const sampleVoices = [
+    off,
+    { name: 'Daniel', label: 'Daniel', id: 'Daniel', lang: 'en_GB' },
+    { name: 'Mónica', label: 'Mónica', id: 'Mónica', lang: 'es_ES' },
+    { name: 'Thomas', label: 'Thomas', id: 'Thomas', lang: 'fr_FR' },
+  ];
+
+  describe('buildMessage', () => {
+    it('localizes the announcement to the voice language', () => {
+      expect(vp.buildMessage('es_ES', 'Deploy auth')).toBe('Tarea terminada: Deploy auth');
+      expect(vp.buildMessage('pt-BR', 'X')).toBe('Tarefa concluída: X');
+      expect(vp.buildMessage('fr_FR', 'X')).toBe('Tâche terminée : X');
+      expect(vp.buildMessage('de-DE', 'X')).toBe('Aufgabe erledigt: X');
+      expect(vp.buildMessage('cmn', 'X')).toBe('任务完成：X');
+    });
+
+    it('falls back to English for unknown / empty languages', () => {
+      expect(vp.buildMessage('en_US', 'Deploy auth')).toBe('Done: Deploy auth');
+      expect(vp.buildMessage('xx', 'X')).toBe('Done: X');
+      expect(vp.buildMessage('', 'X')).toBe('Done: X');
+    });
+  });
+
+  describe('getVoices', () => {
+    it('prepends Off and sorts real voices by language then name', () => {
+      const provider = {
+        isAvailable: () => true,
+        listVoices: () => [
+          { id: 'Mónica', label: 'Mónica', lang: 'es_ES' },
+          { id: 'Daniel', label: 'Daniel', lang: 'en_GB' },
+        ],
+      };
+      const v = vp.getVoices(provider);
+      expect(v[0].name).toBe('off');
+      expect(v.slice(1).map((x) => x.id)).toEqual(['Daniel', 'Mónica']);
+    });
+
+    it('offers a System default entry when the engine enumerates nothing', () => {
+      const provider = { isAvailable: () => true, listVoices: () => [] };
+      const v = vp.getVoices(provider);
+      expect(v.map((x) => x.name)).toEqual(['off', 'default']);
+    });
+
+    it('prepends personality presets (after Off, before raw voices) on macOS', () => {
+      const provider = {
+        platform: 'darwin',
+        isAvailable: () => true,
+        listVoices: () => [
+          { id: 'Zarvox', label: 'Zarvox', lang: 'en_US' },
+          { id: 'Bad News', label: 'Bad News', lang: 'en_US' },
+        ],
+      };
+      const v = vp.getVoices(provider);
+      expect(v[0].name).toBe('off');
+      expect(v[1].name).toBe('preset:robot');
+      expect(v[1].label).toContain('Robot');
+      expect(v[1].id).toBe('Zarvox');
+      // raw voices still listed after the presets
+      expect(v.some((x) => x.name === 'Zarvox')).toBe(true);
+    });
+  });
+
+  describe('resolvePresets', () => {
+    const macProvider = (ids) => ({
+      platform: 'darwin',
+      listVoices: () => ids.map((id) => ({ id, label: id, lang: 'en_US' })),
+    });
+
+    it('resolves macOS presets to installed novelty voices with their lang', () => {
+      const raw = macProvider(['Zarvox', 'Bad News']).listVoices();
+      const presets = vp.resolvePresets({ platform: 'darwin' }, raw);
+      const robot = presets.find((p) => p.name === 'preset:robot');
+      expect(robot).toMatchObject({ id: 'Zarvox', lang: 'en_US' });
+      expect(presets.find((p) => p.name === 'preset:dramatic').id).toBe('Bad News');
+    });
+
+    it('hides a preset when none of its candidates are installed', () => {
+      const raw = macProvider(['Samantha']).listVoices(); // no novelty voices
+      const presets = vp.resolvePresets({ platform: 'darwin' }, raw);
+      expect(presets).toEqual([]);
+    });
+
+    it('falls back to the second candidate when the first is missing', () => {
+      const raw = macProvider(['Bells']).listVoices(); // opera: Cellos missing, Bells present
+      const presets = vp.resolvePresets({ platform: 'darwin' }, raw);
+      expect(presets.find((p) => p.name === 'preset:opera').id).toBe('Bells');
+    });
+
+    it('resolves espeak variant presets on Linux with an espeak engine', () => {
+      const presets = vp.resolvePresets({ platform: 'linux', engine: 'espeak-ng' }, []);
+      expect(presets.find((p) => p.name === 'preset:ghost').id).toBe('en+whisper');
+      expect(presets.every((p) => p.lang === 'en')).toBe(true);
+    });
+
+    it('returns nothing on Linux with only spd-say, or on Windows', () => {
+      expect(vp.resolvePresets({ platform: 'linux', engine: 'spd-say' }, [])).toEqual([]);
+      expect(vp.resolvePresets({ platform: 'win32' }, [{ id: 'Zarvox', label: 'Zarvox', lang: 'en_US' }])).toEqual([]);
+    });
+  });
+
+  describe('isVoiceAvailable', () => {
+    it('reflects the provider availability', () => {
+      expect(vp.isVoiceAvailable({ isAvailable: () => true })).toBe(true);
+      expect(vp.isVoiceAvailable({ isAvailable: () => false })).toBe(false);
+    });
+  });
+
+  describe('reduceKey', () => {
+    it('moves down/up with wrap-around over the given list', () => {
+      const voices = sampleVoices;
+      const last = voices.length - 1;
+      expect(vp.reduceKey({ index: 0, voices }, '\x1b[B')).toEqual({ index: 1, action: 'move' });
+      expect(vp.reduceKey({ index: 0, voices }, '\x1b[A')).toEqual({ index: last, action: 'move' });
+      expect(vp.reduceKey({ index: last, voices }, '\x1b[B')).toEqual({ index: 0, action: 'move' });
+    });
+
+    it('selects on Enter/Space and cancels on Esc/Ctrl-C', () => {
+      expect(vp.reduceKey({ index: 2, voices: sampleVoices }, '\r').action).toBe('select');
+      expect(vp.reduceKey({ index: 2, voices: sampleVoices }, ' ').action).toBe('select');
+      expect(vp.reduceKey({ index: 2, voices: sampleVoices }, '\x1b').action).toBe('cancel');
+      expect(vp.reduceKey({ index: 2, voices: sampleVoices }, '\x03').action).toBe('cancel');
+    });
+  });
+
+  describe('windowFor', () => {
+    it('shows the whole list when it fits', () => {
+      expect(vp.windowFor(0, 4, 10)).toEqual({ start: 0, end: 4 });
+    });
+
+    it('centers on the index and clamps to the bounds for long lists', () => {
+      expect(vp.windowFor(0, 100, 10)).toEqual({ start: 0, end: 10 });
+      expect(vp.windowFor(50, 100, 10)).toEqual({ start: 45, end: 55 });
+      expect(vp.windowFor(99, 100, 10)).toEqual({ start: 90, end: 100 });
+    });
+  });
+
+  describe('renderPicker', () => {
+    it('renders the visible voices, the pointer and a preview hint', () => {
+      const screen = vp.renderPicker({ index: 0, voices: sampleVoices });
+      for (const v of sampleVoices) expect(screen).toContain(v.label);
+      expect(screen).toContain('❱');
+      expect(screen).toContain('Preview');
+      expect(screen).toContain('(es_ES)');
+    });
+
+    it('shows scroll indicators and only a window for long lists', () => {
+      const many = Array.from({ length: 100 }, (_, i) => ({
+        name: `v${i}`, label: `Voice ${i}`, id: `v${i}`, lang: 'en_US',
+      }));
+      const screen = vp.renderPicker({ index: 50, voices: many, maxRows: 10 });
+      expect(screen).toContain('more');
+      expect(screen).toContain('Voice 50');
+      expect(screen).not.toContain('Voice 0 '); // outside the window
+    });
+  });
+
+  describe('runVoicePicker', () => {
+    function fakeTty() {
+      const e = new EventEmitter();
+      e.isTTY = true;
+      e.setRawMode = () => {};
+      e.resume = () => {};
+      e.pause = () => {};
+      return e;
+    }
+    const sink = { write() {} };
+
+    it('previews on move and resolves the selected entry', async () => {
+      const input = fakeTty();
+      const spoken = [];
+      const speak = (entry) => { spoken.push(entry.id); return null; };
+      const p = vp.runVoicePicker({ input, output: sink, speak, voices: sampleVoices, initial: '' });
+      input.emit('data', Buffer.from('\x1b[B')); // off -> Daniel
+      input.emit('data', Buffer.from('\x1b[B')); // Daniel -> Mónica
+      input.emit('data', Buffer.from('\r'));
+      const result = await p;
+      expect(spoken).toEqual(['Daniel', 'Mónica']);
+      expect(result.id).toBe('Mónica');
+      expect(result.lang).toBe('es_ES');
+    });
+
+    it('pre-selects the current voice by id', async () => {
+      const input = fakeTty();
+      const p = vp.runVoicePicker({ input, output: sink, speak: () => null, voices: sampleVoices, initial: 'Thomas' });
+      input.emit('data', Buffer.from('\r'));
+      expect((await p).id).toBe('Thomas');
+    });
+
+    it('resolves null when cancelled', async () => {
+      const input = fakeTty();
+      const p = vp.runVoicePicker({ input, output: sink, speak: () => null, voices: sampleVoices, initial: '' });
+      input.emit('data', Buffer.from('\x1b'));
+      expect(await p).toBeNull();
+    });
+
+    it('resolves null without a TTY', async () => {
+      const input = new EventEmitter();
+      input.isTTY = false;
+      expect(await vp.runVoicePicker({ input, output: sink, speak: () => null, voices: sampleVoices })).toBeNull();
     });
   });
 });
