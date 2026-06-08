@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.2] — 2026-06-08
+
+### Docs
+- Trimmed the README from ~217 to ~97 lines: merged the three sections that repeated the hook → refine → `custom-title` mechanic into a single "How it works", condensed the installer/token-usage details to one line each, reduced Troubleshooting to diagnostics + debug logging, and dropped the advanced `.voice-config` variable table (now a one-line pointer). Moved Usage up front.
+
 ## [5.4.1] — 2026-06-08
 
 ### Fixed

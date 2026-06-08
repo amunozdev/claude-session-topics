@@ -10,20 +10,38 @@ Session topics for Claude Code. Auto-detect and display a topic in the statuslin
 npx @alexismunozdev/claude-session-topics
 ```
 
-On an interactive terminal this opens the color picker (arrow keys + live preview); press `Esc` to keep the current color. Skip it by passing `--color <name>`, or on non-interactive/CI runs.
+On an interactive terminal this opens the color picker (arrow keys + live preview); press `Esc` to keep the current color. Skip it with `--color <name>` or on non-interactive/CI runs.
+
+## Usage
+
+The topic is detected automatically and shown in the statusline (`◆ Topic`). To set it yourself:
+
+```
+/set-topic Fix Login Bug
+```
+
+A manual topic is protected for the rest of the session — it always wins over auto-detection.
+
+## How it works
+
+- A `UserPromptSubmit` hook writes a fast bash-heuristic topic instantly (visible in <200 ms), then refines it in the background with `claude -p --model haiku`.
+- Once Claude Code generates its internal `custom-title`, the `Stop` hook upgrades the topic to that higher-quality version.
+- Source precedence: `manual > custom-title > refined > heuristic`.
+
+The installer adds one skill (`set-topic`), two hooks (`UserPromptSubmit`, `Stop`), and a statusline command — composing with any existing statusline instead of overwriting it.
+
+**Token cost:** one short `claude -p --model haiku` call per message (rate-limited to once every ~15 s). Reading `custom-title` and `/set-topic` use zero model tokens.
 
 ## Voice notifications
 
-Get spoken alerts when Claude detects a new session topic — useful when multitasking across terminals.
+Get a spoken alert when Claude detects a new topic — handy when multitasking across terminals.
 
 ```bash
-npx @alexismunozdev/claude-session-topics --voice       # English default
+npx @alexismunozdev/claude-session-topics --voice       # enable (English default)
 npx @alexismunozdev/claude-session-topics --voice es    # Spanish fallback
 ```
 
-The voice **automatically matches your conversation language**. If you write in Spanish, you'll hear *"Tarea terminada: Deploy Config"*. In English: *"Done: Deploy Config"*.
-
-**Platforms supported:**
+The voice **automatically matches your conversation language**: write in Spanish and you'll hear *"Tarea terminada: Deploy Config"*; in English, *"Done: Deploy Config"*.
 
 | Platform | Engine | Install needed? |
 |----------|--------|----------------|
@@ -31,178 +49,40 @@ The voice **automatically matches your conversation language**. If you write in 
 | Linux | `espeak` / `espeak-ng` | `sudo apt install espeak` |
 | Windows | PowerShell SAPI | No |
 
-**Volume:** set how loud the announcement is (0–100, default 100):
-
 ```bash
-npx @alexismunozdev/claude-session-topics --volume       # interactive slider (preview at each level)
+npx @alexismunozdev/claude-session-topics --volume       # set volume (interactive slider, 0–100)
 npx @alexismunozdev/claude-session-topics --volume 60    # set directly
+npx @alexismunozdev/claude-session-topics --no-voice     # disable
 ```
 
-**Disable voice:**
-
-```bash
-npx @alexismunozdev/claude-session-topics --no-voice
-```
-
-**Customize** by editing `~/.claude/session-topics/.voice-config`:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VOICE_ENABLED` | `1` | Master on/off |
-| `VOICE_AUTO_LANG` | `1` | Auto-detect language from conversation |
-| `VOICE_LANG` | `en` | Fallback language when auto-detect is off |
-| `VOICE_NAME` | *(empty)* | Specific voice (e.g., `Mónica`, `Jorge` on macOS) |
-| `VOICE_TEMPLATE` | *(empty)* | Custom message template with `{topic}` placeholder |
-| `VOICE_MUTED` | `0` | Temporary mute without disabling |
-| `VOICE_VOLUME` | `100` | Playback volume, 0–100 |
-
-## What it does
-
-- A `UserPromptSubmit` hook runs on every user message: it writes a fast bash heuristic immediately, then refines the topic asynchronously via `claude -p` headless
-- Once Claude Code generates its internal `custom-title`, the Stop hook upgrades the topic to that higher-quality version
-- `/set-topic` always wins — manual topics are protected for the rest of the session
-- Shows the topic in the Claude Code statusline (`◆ Topic`)
-- Composes with existing statusline plugins (doesn't overwrite)
-
-## What the installer configures
-
-1. Copies the statusline script to `~/.claude/session-topics/`
-2. Installs the `UserPromptSubmit` hook (`user-prompt-hook.sh`) for live topic generation
-3. Installs the `Stop` hook (`auto-topic-hook.sh`) that upgrades the topic from Claude Code's internal `custom-title`
-4. Configures `statusLine` in `~/.claude/settings.json`
-5. Adds bash permission for the scripts
-6. Installs the `set-topic` skill to `~/.claude/skills/`
-7. If you already have a statusline, creates a wrapper that shows both
-8. Copies `voice-notify.sh` for optional voice alerts
-
-## Requirements
-
-- `jq`
-- `bash`
-- POSIX-compatible system (macOS, Linux)
-- `espeak` (Linux only, for voice notifications)
+Advanced tweaks (specific voice, custom message template) live in `~/.claude/session-topics/.voice-config`.
 
 ## Customization
 
-By default the topic is bold cyan, drawn from the ANSI palette so it adapts to light and dark terminal themes. Supported colors: `red`, `green`, `yellow`, `blue`, `magenta`, `cyan` (default), `white`, `orange`, `grey`/`gray`, `none` (bold, no color). Raw ANSI codes are also accepted (e.g., `38;5;208`). Ways to change it:
-
-- Pick interactively (arrow keys + live status-bar preview):
-  ```bash
-  npx @alexismunozdev/claude-session-topics --color
-  ```
-- Set it directly with `--color <name>`:
-  ```bash
-  npx @alexismunozdev/claude-session-topics --color cyan
-  ```
-- Edit the config file directly:
-  ```bash
-  echo "cyan" > ~/.claude/session-topics/.color-config
-  ```
-- Set the `CLAUDE_SESSION_TOPICS_COLOR` environment variable:
-  ```bash
-  export CLAUDE_SESSION_TOPICS_COLOR="cyan"
-  ```
-
-### All options at once
-
-`--options` opens an interactive menu showing the current color, voice, and volume, and launches the matching picker for whichever you choose:
+The topic is bold cyan by default. Supported colors: `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `orange`, `grey`/`gray`, `none`. Raw ANSI codes also work (e.g. `38;5;208`).
 
 ```bash
-npx @alexismunozdev/claude-session-topics --options
+npx @alexismunozdev/claude-session-topics --color        # interactive picker with live preview
+npx @alexismunozdev/claude-session-topics --color cyan   # set directly
+npx @alexismunozdev/claude-session-topics --options      # menu to review/change color, voice & volume
 ```
 
-## Token usage
+You can also set the color via `~/.claude/session-topics/.color-config` or the `CLAUDE_SESSION_TOPICS_COLOR` env var.
 
-This package installs **one skill** (`set-topic`) and **two hooks** (`UserPromptSubmit`, `Stop`).
+## Requirements
 
-- The `UserPromptSubmit` hook writes a topic synchronously via a bash heuristic (zero model tokens) and then spawns a background `claude -p --model haiku` call to refine it (one short headless call per user message, rate-limited to once every 15 seconds and only re-run periodically — every 3 turns when the topic is already `refined`, every 5 turns when it's `custom-title`).
-- The `Stop` hook reads Claude Code's internal `custom-title` from the transcript JSONL — pure `jq` + `awk`, no model tokens.
-- The `set-topic` skill is a minimal stub used only when you invoke `/set-topic` explicitly.
-
-There is no longer an `auto-topic` skill — its job is now done deterministically by the `UserPromptSubmit` hook, removing the dependency on the model deciding to invoke a skill.
-
-## Usage
-
-### Auto-topic (automatic)
-
-On every user message, the `UserPromptSubmit` hook writes a heuristic topic instantly (visible in <200 ms) and then refines it in the background via `claude -p`. After Claude Code generates an internal `custom-title` (typically a few turns in, or after a plan mode), the `Stop` hook upgrades the topic to that higher-quality version.
-
-### /set-topic (manual)
-
-Change the topic at any time:
-
-```
-/set-topic Fix Login Bug
-/set-topic API Redesign
-```
-
-## How it works
-
-```
-User submits a prompt
-    |
-UserPromptSubmit hook (user-prompt-hook.sh)
-    ├─ writes a bash heuristic topic synchronously (≤200 ms)
-    └─ forks claude -p --model haiku to refine the topic in background
-    |
-Claude responds → Stop hook (auto-topic-hook.sh)
-    └─ if custom-title is present in transcript, upgrades the topic
-    |
-Statusline reads ~/.claude/session-topics/${SESSION_ID} → ◆ Topic
-```
-
-Source precedence: `manual > custom-title > refined > heuristic > empty`. Each transition is recorded in `~/.claude/session-topics/.source-${SESSION_ID}`.
-
-`/set-topic` writes a `.manual-set-${SESSION_ID}` marker that prevents both hooks from overwriting the topic for the rest of the session.
+- `jq`, `bash`, and a POSIX-compatible system (macOS, Linux)
+- `espeak` (Linux only, for voice notifications)
 
 ## Troubleshooting
 
-### Run Diagnostics
-
-Check your installation:
+Run diagnostics:
 
 ```bash
 ~/.claude/session-topics/diagnose.sh
 ```
 
-Or from the project directory:
-```bash
-./scripts/diagnose.sh
-```
-
-### Enable Debug Logging
-
-Set the verbose environment variable:
-
-```bash
-export CLAUDE_SESSION_TOPICS_VERBOSE=1
-# Then run your claude commands
-```
-
-### View Debug Logs
-
-Debug logs are stored in:
-
-```bash
-cat ~/.claude/session-topics/debug.log
-```
-
-Log levels (set via `CLAUDE_SESSION_TOPICS_LOG_LEVEL`):
-- `0` = DEBUG (most verbose)
-- `1` = INFO (default)
-- `2` = WARN
-- `3` = ERROR (least verbose)
-
-### Common Issues
-
-**Topic not appearing in statusline:**
-1. Check that the hook is registered: `cat ~/.claude/settings.json | jq '.hooks'`
-2. Verify permissions: `cat ~/.claude/settings.json | jq '.permissions'`
-3. Check debug logs for errors
-
-**Permission denied errors:**
-1. Ensure scripts are executable: `chmod +x ~/.claude/session-topics/*.sh`
-2. Check that Bash permission is in settings.json
+For verbose logs, set `CLAUDE_SESSION_TOPICS_VERBOSE=1` and check `~/.claude/session-topics/debug.log`.
 
 ## Uninstall
 
@@ -210,7 +90,7 @@ Log levels (set via `CLAUDE_SESSION_TOPICS_LOG_LEVEL`):
 npx @alexismunozdev/claude-session-topics --uninstall
 ```
 
-This also removes voice configuration (`~/.claude/session-topics/.voice-config`).
+Removes scripts, settings, and the skill (also the voice config); your topic data is preserved.
 
 ## License
 
