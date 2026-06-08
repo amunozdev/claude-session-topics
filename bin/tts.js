@@ -95,8 +95,19 @@ function normalizeVolume(volume) {
 function buildSpeakCommand({ platform, engine, voiceId, message, volume }) {
     const vol = normalizeVolume(volume);
     if (platform === 'darwin') {
-        const text = vol === null ? message : `[[volm ${(vol / 100).toFixed(2)}]] ${message}`;
-        return { cmd: 'say', args: voiceId ? ['-v', voiceId, text] : [text] };
+        if (vol === null) {
+            return { cmd: 'say', args: voiceId ? ['-v', voiceId, message] : [message] };
+        }
+        // `say` ignores the embedded [[volm]] command on modern macOS, so for a
+        // reduced volume we render to a temp file and let afplay set the real
+        // playback level. Voice/message/volume are passed positionally so they
+        // can't break out of the shell.
+        const vflt = (vol / 100).toFixed(2);
+        const script =
+            'd="$(mktemp -d)" || exit 1; f="$d/v.aiff"; ' +
+            'if [ -n "$3" ]; then say -v "$3" -o "$f" "$2"; else say -o "$f" "$2"; fi; ' +
+            'afplay -v "$1" "$f"; rm -rf "$d"';
+        return { cmd: 'sh', args: ['-c', script, 'sh', vflt, message, voiceId || ''] };
     }
     if (platform === 'win32') {
         const sel = voiceId ? `$s.SelectVoice('${psEscape(voiceId)}'); ` : '';

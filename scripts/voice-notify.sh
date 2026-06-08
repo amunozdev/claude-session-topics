@@ -54,21 +54,40 @@ else
 fi
 
 speak_macos() {
-  # `say` has no volume flag; the embedded [[volm 0–1]] command sets it inline.
-  local msg="$MESSAGE"
-  if (( VOICE_VOLUME < 100 )); then
-    local volm
-    volm=$(awk "BEGIN{printf \"%.2f\", ${VOICE_VOLUME}/100}")
-    msg="[[volm ${volm}]] ${MESSAGE}"
+  # At full volume, speak directly. Below full, `say`'s embedded [[volm]] command
+  # is ignored on modern macOS, so render to a temp file and let afplay set the
+  # real playback level. Everything runs in the background so the hook never blocks.
+  if (( VOICE_VOLUME >= 100 )); then
+    if [[ -n "$VOICE_NAME" ]]; then
+      say -v "$VOICE_NAME" "$MESSAGE" &
+    else
+      case "$EFFECTIVE_LANG" in
+        es*) say -v "Mónica" "$MESSAGE" & ;;
+        *)   say "$MESSAGE" & ;;
+      esac
+    fi
+    return
   fi
-  if [[ -n "$VOICE_NAME" ]]; then
-    say -v "$VOICE_NAME" "$msg" &
-  else
+
+  local vol voice
+  vol=$(awk "BEGIN{printf \"%.2f\", ${VOICE_VOLUME}/100}")
+  voice="$VOICE_NAME"
+  if [[ -z "$voice" ]]; then
     case "$EFFECTIVE_LANG" in
-      es*) say -v "Mónica" "$msg" & ;;
-      *)   say "$msg" & ;;
+      es*) voice="Mónica" ;;
     esac
   fi
+  (
+    d="$(mktemp -d)" || exit 0
+    f="$d/v.aiff"
+    if [[ -n "$voice" ]]; then
+      say -v "$voice" -o "$f" "$MESSAGE"
+    else
+      say -o "$f" "$MESSAGE"
+    fi
+    afplay -v "$vol" "$f"
+    rm -rf "$d"
+  ) &
 }
 
 speak_linux() {

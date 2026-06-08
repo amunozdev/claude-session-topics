@@ -96,9 +96,14 @@ describe('buildSpeakCommand', () => {
   });
 
   describe('volume', () => {
-    it('macOS prepends the [[volm]] embedded command below full', () => {
-      expect(buildSpeakCommand({ platform: 'darwin', voiceId: 'Mónica', message: 'Hola', volume: 70 }))
-        .toEqual({ cmd: 'say', args: ['-v', 'Mónica', '[[volm 0.70]] Hola'] });
+    it('macOS renders to a temp file and plays via afplay -v below full ([[volm]] is ignored on modern macOS)', () => {
+      const { cmd, args } = buildSpeakCommand({ platform: 'darwin', voiceId: 'Mónica', message: 'Hola', volume: 70 });
+      expect(cmd).toBe('sh');
+      expect(args[0]).toBe('-c');
+      expect(args[1]).toContain('say -v "$3" -o');
+      expect(args[1]).toContain('afplay -v "$1"');
+      // positional args: sh $0, volume float, message, voice id
+      expect(args.slice(2)).toEqual(['sh', '0.70', 'Hola', 'Mónica']);
     });
 
     it('Windows sets $s.Volume before speaking', () => {

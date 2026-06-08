@@ -3,7 +3,7 @@ name: set-topic
 description: Set or change the session topic displayed in the statusline
 argument-hint: <topic text>
 allowed-tools: [Bash]
-version: "5.4.0"
+version: "5.4.1"
 ---
 
 Set the session topic to: $ARGUMENTS

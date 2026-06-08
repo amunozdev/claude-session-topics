@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.1] — 2026-06-08
+
+### Fixed
+- Voice volume had no audible effect on macOS: `say`'s embedded `[[volm]]` command is ignored on modern macOS (the rendered sound level was identical at every setting). Below full volume the announcement is now rendered to a temp file with `say -o` and played through `afplay -v`, which sets the real playback level. Full volume (100) still speaks directly.
+
 ## [5.4.0] — 2026-06-08
 
 ### Added
