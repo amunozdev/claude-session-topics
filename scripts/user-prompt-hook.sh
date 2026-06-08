@@ -283,9 +283,13 @@ refine_topic() {
   # so the model can't burn the single turn on a tool call (which would make the
   # CLI emit "Error: Reached max turns 1" to stdout and get written as the topic).
   # --output-format json lets us accept the result only when is_error is false.
+  # --no-session-persistence keeps this headless run from writing its own
+  # transcript under ~/.claude/projects/<cwd>/, which otherwise shows up as an
+  # orphan session in the IDE list with the title prompt as its preview.
   printf '%s' "$full_prompt" | CLAUDE_SESSION_TOPICS_SKIP=1 \
     run_with_timeout 30 claude -p --model haiku --max-turns 1 \
-      --strict-mcp-config --allowedTools "" --output-format json >"$out_file" 2>/dev/null || true
+      --strict-mcp-config --allowedTools "" --no-session-persistence \
+      --output-format json >"$out_file" 2>/dev/null || true
   if command -v jq >/dev/null 2>&1; then
     refined=$(jq -r 'select(.is_error == false) | .result // empty' "$out_file" 2>/dev/null \
               | grep -v '^[[:space:]]*$' | head -n 1 || true)
