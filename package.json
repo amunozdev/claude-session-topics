@@ -1,6 +1,6 @@
 {
   "name": "@alexismunozdev/claude-session-topics",
-  "version": "5.3.3",
+  "version": "5.4.0",
   "description": "Session topics for Claude Code — auto-set and display a topic in the statusline, change anytime with /set-topic",
   "bin": {
     "claude-session-topics": "bin/install.js"
@@ -12,7 +12,7 @@
     "test:watch": "vitest",
     "version:check": "bash scripts/check-versions.sh",
     "version:sync": "node scripts/sync-versions.js",
-    "lint": "shellcheck scripts/*.sh --severity=warning && eslint bin/install.js",
+    "lint": "shellcheck scripts/*.sh --severity=warning && eslint bin/",
     "diagnose": "bash scripts/diagnose.sh"
   },
   "packageManager": "pnpm@10.29.1",

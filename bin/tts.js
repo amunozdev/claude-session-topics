@@ -78,25 +78,44 @@ const WIN_LIST_SCRIPT =
 
 // ─── Pure command builder ────────────────────────────────────────────────────
 
-// Build the { cmd, args } to speak `message` with an optional voice id.
-function buildSpeakCommand({ platform, engine, voiceId, message }) {
+// Clamp an optional 0–100 volume to a usable integer, or null when unset/full.
+// `null`/`undefined`/100 mean "no change" so the existing args stay untouched.
+function normalizeVolume(volume) {
+    if (volume === null || volume === undefined) return null;
+    let v = Math.round(Number(volume));
+    if (!Number.isFinite(v)) return null;
+    if (v < 0) v = 0;
+    if (v > 100) v = 100;
+    return v === 100 ? null : v;
+}
+
+// Build the { cmd, args } to speak `message` with an optional voice id and an
+// optional 0–100 `volume`. Volume maps per engine: macOS embedded `[[volm]]`
+// (0–1), espeak `-a` amplitude (0–200), spd-say `-i` (−100..100), SAPI `$s.Volume`.
+function buildSpeakCommand({ platform, engine, voiceId, message, volume }) {
+    const vol = normalizeVolume(volume);
     if (platform === 'darwin') {
-        return { cmd: 'say', args: voiceId ? ['-v', voiceId, message] : [message] };
+        const text = vol === null ? message : `[[volm ${(vol / 100).toFixed(2)}]] ${message}`;
+        return { cmd: 'say', args: voiceId ? ['-v', voiceId, text] : [text] };
     }
     if (platform === 'win32') {
         const sel = voiceId ? `$s.SelectVoice('${psEscape(voiceId)}'); ` : '';
+        const volCmd = vol === null ? '' : `$s.Volume = ${vol}; `;
         const script =
             'Add-Type -AssemblyName System.Speech; ' +
             '$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; ' +
+            volCmd +
             sel +
             `$s.Speak('${psEscape(message)}')`;
         return { cmd: engine || 'powershell.exe', args: ['-NoProfile', '-Command', script] };
     }
     // linux
     if (engine === 'spd-say') {
-        return { cmd: 'spd-say', args: voiceId ? ['-l', voiceId, message] : [message] };
+        const volArgs = vol === null ? [] : ['-i', String(vol * 2 - 100)];
+        return { cmd: 'spd-say', args: [...volArgs, ...(voiceId ? ['-l', voiceId, message] : [message])] };
     }
-    return { cmd: engine || 'espeak', args: voiceId ? ['-v', voiceId, message] : [message] };
+    const volArgs = vol === null ? [] : ['-a', String(vol * 2)];
+    return { cmd: engine || 'espeak', args: [...volArgs, ...(voiceId ? ['-v', voiceId, message] : [message])] };
 }
 
 // ─── Providers (impure: enumeration/availability hit the system) ─────────────
@@ -113,7 +132,7 @@ function makeMacProvider() {
                 return [];
             }
         },
-        speakCommand: (voiceId, message) => buildSpeakCommand({ platform: 'darwin', voiceId, message }),
+        speakCommand: (voiceId, message, volume) => buildSpeakCommand({ platform: 'darwin', voiceId, message, volume }),
     };
 }
 
@@ -131,7 +150,7 @@ function makeWinProvider() {
                 return [];
             }
         },
-        speakCommand: (voiceId, message) => buildSpeakCommand({ platform: 'win32', engine: bin, voiceId, message }),
+        speakCommand: (voiceId, message, volume) => buildSpeakCommand({ platform: 'win32', engine: bin, voiceId, message, volume }),
     };
 }
 
@@ -149,7 +168,7 @@ function makeLinuxProvider() {
                 return [];
             }
         },
-        speakCommand: (voiceId, message) => buildSpeakCommand({ platform: 'linux', engine, voiceId, message }),
+        speakCommand: (voiceId, message, volume) => buildSpeakCommand({ platform: 'linux', engine, voiceId, message, volume }),
     };
 }
 
@@ -163,6 +182,7 @@ function getProvider(platform = process.platform) {
 module.exports = {
     commandExists,
     psEscape,
+    normalizeVolume,
     parseSayVoices,
     parseWinVoices,
     parseEspeakVoices,

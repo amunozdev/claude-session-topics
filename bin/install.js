@@ -12,6 +12,8 @@ const os = require('os');
 const { execSync } = require('child_process');
 const { runColorPicker } = require('./color-picker');
 const { runVoicePicker, isVoiceAvailable } = require('./voice-picker');
+const { runVolumePicker } = require('./volume-picker');
+const { runOptionsMenu } = require('./options-menu');
 
 // ─── ANSI helpers ────────────────────────────────────────────────────────────
 
@@ -156,9 +158,14 @@ function validateColor(value) {
     return false;
 }
 
+// A volume is an integer 0–100 (percentage).
+function validateVolume(value) {
+    return /^\d{1,3}$/.test(value) && Number(value) >= 0 && Number(value) <= 100;
+}
+
 function parseArgs(argv) {
     const args = argv.slice(2);
-    const result = { action: 'install', color: null, voice: false, voiceLang: 'en', noVoice: false };
+    const result = { action: 'install', color: null, voice: false, voiceLang: 'en', noVoice: false, volume: null };
 
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
@@ -202,6 +209,26 @@ function parseArgs(argv) {
             result.noVoice = true;
             continue;
         }
+        if (arg === '--volume') {
+            const next = args[i + 1];
+            // With a 0–100 value → set directly. With no value (or another flag
+            // next) → open the interactive volume slider.
+            if (next === undefined || next.startsWith('--')) {
+                result.action = 'volume-picker';
+                continue;
+            }
+            if (!validateVolume(next)) {
+                err(`Invalid volume: "${next}". Use an integer between 0 and 100.`);
+                process.exit(1);
+            }
+            result.volume = Number(next);
+            i++;
+            continue;
+        }
+        if (arg === '--options') {
+            result.action = 'options';
+            continue;
+        }
     }
 
     return result;
@@ -218,6 +245,8 @@ ${BOLD}Usage:${RESET}
   npx @alexismunozdev/claude-session-topics --color       Pick color interactively
   npx @alexismunozdev/claude-session-topics --color cyan  Install with color
   npx @alexismunozdev/claude-session-topics --voice       Pick voice interactively
+  npx @alexismunozdev/claude-session-topics --volume      Pick voice volume interactively
+  npx @alexismunozdev/claude-session-topics --options     Review & change all options
   npx @alexismunozdev/claude-session-topics --uninstall   Uninstall
 
 ${BOLD}Options:${RESET}
@@ -231,6 +260,11 @@ ${BOLD}Options:${RESET}
                     each voice out loud (↑↓ to hear, Enter/Space to choose).
                     With a language, enables it directly. Example: --voice es
   --no-voice       Disable voice notifications
+  --volume [n]     Set the voice volume (0–100). With no value, opens an
+                    interactive slider that plays the current voice at each
+                    level (↑↓ to adjust, Enter to choose). Default: 100.
+  --options        Open an interactive menu showing the current color, voice,
+                    and volume, and launch a picker for whichever you choose.
   -h, --help       Show this help
 
 ${BOLD}What it does:${RESET}
@@ -248,7 +282,7 @@ ${BOLD}After install:${RESET}
 
 // ─── Install ─────────────────────────────────────────────────────────────────
 
-async function install(color, voice, voiceLang, noVoice) {
+async function install(color, voice, voiceLang, noVoice, volume) {
     heading('Installing claude-session-topics');
 
     // ── Step 1: Check deps ───────────────────────────────────────────────
@@ -486,6 +520,7 @@ async function install(color, voice, voiceLang, noVoice) {
             'VOICE_TEMPLATE=',
             'VOICE_AUTO_LANG=1',
             'VOICE_MUTED=0',
+            'VOICE_VOLUME=100',
         ].join('\n') + '\n';
         fs.writeFileSync(VOICE_CONFIG, configContent, { encoding: 'utf8', mode: 0o644 });
         ok(`Voice notifications enabled (language: ${voiceLang})`);
@@ -524,22 +559,42 @@ async function install(color, voice, voiceLang, noVoice) {
     // current voice. Moving the selection plays each voice out loud; Esc keeps
     // the current one. Without a TTS engine we say so and skip — no dead picker.
     let voiceLabel = null;
+    let volumeLabel = null;
+
+    // Explicit --volume N applies to whatever voice config exists (mirrors --color).
+    if (volume != null) {
+        if (writeVoiceVolume(volume)) {
+            volumeLabel = `${volume}%`;
+            ok(`Voice volume set to: ${BOLD}${volumeLabel}${RESET}`);
+        } else {
+            info('Voice is not configured yet — enable it with --voice to use --volume.');
+        }
+    }
+
     if (!voice && !noVoice && process.stdin.isTTY) {
         if (!isVoiceAvailable()) {
             info('No text-to-speech engine found on this device — skipping voice setup.');
         } else {
             console.log('');
             const chosenVoice = await runVoicePicker({ initial: readCurrentVoice() });
-            if (chosenVoice) {
+            if (chosenVoice && chosenVoice.name !== 'off') {
+                voiceLabel = chosenVoice.lang
+                    ? `${chosenVoice.label} (${chosenVoice.lang})`
+                    : chosenVoice.label;
+                ok(`Notification voice set to: ${BOLD}${voiceLabel}${RESET}`);
+                // ── Step 9.7: voice volume slider (only with a voice enabled) ──
+                console.log('');
+                const vol = await runVolumePicker({
+                    initial: readCurrentVolume(),
+                    voiceEntry: { id: chosenVoice.id, lang: chosenVoice.lang },
+                });
+                const finalVol = vol == null ? readCurrentVolume() : vol;
+                writeVoiceConfig(chosenVoice, finalVol);
+                volumeLabel = `${finalVol}%`;
+                if (vol != null) ok(`Voice volume set to: ${BOLD}${volumeLabel}${RESET}`);
+            } else if (chosenVoice) {
                 writeVoiceConfig(chosenVoice);
-                if (chosenVoice.name !== 'off') {
-                    voiceLabel = chosenVoice.lang
-                        ? `${chosenVoice.label} (${chosenVoice.lang})`
-                        : chosenVoice.label;
-                    ok(`Notification voice set to: ${BOLD}${voiceLabel}${RESET}`);
-                } else {
-                    ok('Voice notifications disabled');
-                }
+                ok('Voice notifications disabled');
             }
         }
     }
@@ -558,6 +613,9 @@ async function install(color, voice, voiceLang, noVoice) {
     }
     if (voiceLabel) {
         console.log(`  ${DIM}Voice:${RESET}       ${voiceLabel}`);
+    }
+    if (volumeLabel) {
+        console.log(`  ${DIM}Volume:${RESET}      ${volumeLabel}`);
     }
     console.log('');
     console.log(`  Topics are set automatically. Use ${CYAN}/set-topic <text>${RESET} to override.`);
@@ -745,11 +803,40 @@ function readCurrentVoice() {
     }
 }
 
+// Read the configured playback volume (VOICE_VOLUME), or 100 when unset/invalid.
+function readCurrentVolume() {
+    try {
+        const raw = fs.readFileSync(VOICE_CONFIG, 'utf8');
+        const m = raw.match(/^VOICE_VOLUME=(.*)$/m);
+        const v = m ? Number(m[1].trim()) : NaN;
+        return Number.isFinite(v) && v >= 0 && v <= 100 ? v : 100;
+    } catch {
+        return 100;
+    }
+}
+
+// Read the current voice as a preview entry { id, lang, enabled } from .voice-config.
+function readCurrentVoiceEntry() {
+    try {
+        const raw = fs.readFileSync(VOICE_CONFIG, 'utf8');
+        const enabled = /^VOICE_ENABLED=1\s*$/m.test(raw);
+        const nameMatch = raw.match(/^VOICE_NAME=(.*)$/m);
+        const langMatch = raw.match(/^VOICE_LANG=(.*)$/m);
+        const id = nameMatch ? nameMatch[1].trim() : '';
+        const lang = langMatch ? langMatch[1].trim() : 'en';
+        return { id, lang, enabled };
+    } catch {
+        return { id: '', lang: 'en', enabled: false };
+    }
+}
+
 // Persist a picked voice entry to .voice-config. `off` disables the announcement;
 // an explicit voice stores its real id and locks the language (VOICE_AUTO_LANG=0)
-// so the preview matches what gets spoken on task completion.
-function writeVoiceConfig(entry) {
+// so the preview matches what gets spoken on task completion. Volume defaults to
+// the currently configured value (or 100) when not passed.
+function writeVoiceConfig(entry, volume) {
     const enabled = entry && entry.name !== 'off' ? 1 : 0;
+    const vol = volume == null ? readCurrentVolume() : volume;
     const configContent = [
         '# Voice notification config for claude-session-topics',
         `VOICE_ENABLED=${enabled}`,
@@ -758,8 +845,26 @@ function writeVoiceConfig(entry) {
         'VOICE_TEMPLATE=',
         `VOICE_AUTO_LANG=${enabled ? 0 : 1}`,
         'VOICE_MUTED=0',
+        `VOICE_VOLUME=${vol}`,
     ].join('\n') + '\n';
     fs.writeFileSync(VOICE_CONFIG, configContent, { encoding: 'utf8', mode: 0o644 });
+}
+
+// Update only VOICE_VOLUME in an existing .voice-config, preserving every other
+// field. Returns false (and writes nothing) when voice isn't configured yet.
+function writeVoiceVolume(volume) {
+    let raw;
+    try {
+        raw = fs.readFileSync(VOICE_CONFIG, 'utf8');
+    } catch {
+        return false;
+    }
+    const line = `VOICE_VOLUME=${volume}`;
+    raw = /^VOICE_VOLUME=.*$/m.test(raw)
+        ? raw.replace(/^VOICE_VOLUME=.*$/m, line)
+        : raw.replace(/\n?$/, `\n${line}\n`);
+    fs.writeFileSync(VOICE_CONFIG, raw, { encoding: 'utf8', mode: 0o644 });
+    return true;
 }
 
 async function pickAndSaveVoice() {
@@ -786,21 +891,96 @@ async function pickAndSaveVoice() {
     }
 }
 
+async function pickAndSaveVolume() {
+    if (!process.stdin.isTTY) {
+        info('No interactive terminal — run with a value, e.g. --volume 75');
+        return;
+    }
+    if (!isVoiceAvailable()) {
+        warn('No text-to-speech engine found on this device.');
+        info('On Linux, install one (e.g. sudo apt install espeak-ng) and re-run.');
+        return;
+    }
+    const current = readCurrentVoiceEntry();
+    const chosen = await runVolumePicker({
+        initial: readCurrentVolume(),
+        voiceEntry: { id: current.id, lang: current.lang },
+    });
+    if (chosen == null) {
+        info('No change — kept the current volume.');
+        return;
+    }
+    if (writeVoiceVolume(chosen)) {
+        ok(`Voice volume set to: ${BOLD}${chosen}%${RESET}`);
+    } else {
+        info('Voice is not configured yet — enable it first with --voice. Volume not saved.');
+    }
+}
+
+// Interactive CLI menu: show the current color/voice/volume and launch the matching
+// picker for whichever the user chooses, looping until they quit. Non-TTY runs fall
+// back to a read-only summary listing the flags that change each option.
+async function runOptions() {
+    const voiceLabel = () => {
+        const v = readCurrentVoiceEntry();
+        if (!v.enabled) return 'Off';
+        return v.id || 'System default';
+    };
+
+    if (!process.stdin.isTTY) {
+        heading('claude-session-topics — current options');
+        console.log(`  ${DIM}Color:${RESET}   ${readCurrentColor() || 'cyan'}      ${DIM}change:${RESET} --color`);
+        console.log(`  ${DIM}Voice:${RESET}   ${voiceLabel()}      ${DIM}change:${RESET} --voice`);
+        console.log(`  ${DIM}Volume:${RESET}  ${readCurrentVolume()}%      ${DIM}change:${RESET} --volume`);
+        console.log('');
+        return;
+    }
+
+    while (true) {
+        const action = await runOptionsMenu({
+            settings: {
+                color: readCurrentColor() || 'cyan',
+                voiceLabel: voiceLabel(),
+                volume: readCurrentVolume(),
+            },
+        });
+        if (!action) {
+            info('Done.');
+            return;
+        }
+        console.log('');
+        if (action === 'color') {
+            await pickAndSaveColor();
+        } else if (action === 'voice') {
+            await pickAndSaveVoice();
+        } else if (action === 'volume') {
+            await pickAndSaveVolume();
+        }
+        console.log('');
+    }
+}
+
 async function main() {
-    const { action, color, voice, voiceLang, noVoice } = parseArgs(process.argv);
+    const { action, color, voice, voiceLang, noVoice, volume } = parseArgs(process.argv);
 
     switch (action) {
         case 'help':
             showHelp();
             break;
         case 'install':
-            await install(color, voice, voiceLang, noVoice);
+            await install(color, voice, voiceLang, noVoice, volume);
             break;
         case 'color-picker':
             await pickAndSaveColor();
             break;
         case 'voice-picker':
             await pickAndSaveVoice();
+            break;
+        case 'volume-picker':
+            await pickAndSaveVolume();
+            break;
+        case 'options':
+            await runOptions();
             break;
         case 'uninstall':
             uninstall();
@@ -818,8 +998,11 @@ if (require.main === module) {
 // Export functions for testing
 module.exports = {
     validateColor,
+    validateVolume,
     parseArgs,
     determineStatusLineCase,
     ...require('./color-picker'),
     voicePicker: require('./voice-picker'),
+    volumePicker: require('./volume-picker'),
+    optionsMenu: require('./options-menu'),
 };
