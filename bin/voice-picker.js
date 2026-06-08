@@ -228,7 +228,7 @@ function speak(entry, opts = {}) {
     const message = buildMessage(entry.lang, opts.sampleTopic || 'Deploy auth');
     const spawnFn = opts.spawn || spawn;
     try {
-        const { cmd, args } = provider.speakCommand(entry.id, message);
+        const { cmd, args } = provider.speakCommand(entry.id, message, opts.volume);
         const child = spawnFn(cmd, args, { stdio: 'ignore', detached: true });
         if (child && child.unref) child.unref();
         return child;

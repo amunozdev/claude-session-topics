@@ -107,6 +107,56 @@ describe('Installer Pure Functions', () => {
       const result = parseArgs(['node', 'install.js', '--color', 'blue', '--uninstall']);
       expect(result.action).toBe('uninstall'); // --uninstall takes precedence
     });
+
+    it('should parse --volume with a valid value', () => {
+      const result = parseArgs(['node', 'install.js', '--volume', '75']);
+      expect(result.action).toBe('install');
+      expect(result.volume).toBe(75);
+    });
+
+    it('should exit with error for an out-of-range volume', () => {
+      const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {});
+      const mockError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      parseArgs(['node', 'install.js', '--volume', '150']);
+
+      expect(mockExit).toHaveBeenCalledWith(1);
+      mockExit.mockRestore();
+      mockError.mockRestore();
+    });
+
+    it('should open the volume picker when --volume has no value', () => {
+      const r = parseArgs(['node', 'install.js', '--volume']);
+      expect(r.action).toBe('volume-picker');
+    });
+
+    it('should parse --options', () => {
+      const r = parseArgs(['node', 'install.js', '--options']);
+      expect(r.action).toBe('options');
+    });
+  });
+
+  describe('validateVolume', () => {
+    let validateVolume;
+
+    beforeEach(async () => {
+      const mod = await import('../../bin/install.js');
+      validateVolume = mod.validateVolume;
+    });
+
+    it('accepts integers 0–100', () => {
+      expect(validateVolume('0')).toBe(true);
+      expect(validateVolume('50')).toBe(true);
+      expect(validateVolume('100')).toBe(true);
+    });
+
+    it('rejects out-of-range and non-numeric values', () => {
+      expect(validateVolume('101')).toBe(false);
+      expect(validateVolume('150')).toBe(false);
+      expect(validateVolume('-5')).toBe(false);
+      expect(validateVolume('abc')).toBe(false);
+      expect(validateVolume('')).toBe(false);
+    });
   });
 
   describe('determineStatusLineCase', () => {

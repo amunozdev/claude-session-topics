@@ -31,6 +31,13 @@ The voice **automatically matches your conversation language**. If you write in 
 | Linux | `espeak` / `espeak-ng` | `sudo apt install espeak` |
 | Windows | PowerShell SAPI | No |
 
+**Volume:** set how loud the announcement is (0–100, default 100):
+
+```bash
+npx @alexismunozdev/claude-session-topics --volume       # interactive slider (preview at each level)
+npx @alexismunozdev/claude-session-topics --volume 60    # set directly
+```
+
 **Disable voice:**
 
 ```bash
@@ -47,6 +54,7 @@ npx @alexismunozdev/claude-session-topics --no-voice
 | `VOICE_NAME` | *(empty)* | Specific voice (e.g., `Mónica`, `Jorge` on macOS) |
 | `VOICE_TEMPLATE` | *(empty)* | Custom message template with `{topic}` placeholder |
 | `VOICE_MUTED` | `0` | Temporary mute without disabling |
+| `VOICE_VOLUME` | `100` | Playback volume, 0–100 |
 
 ## What it does
 
@@ -94,6 +102,14 @@ By default the topic is bold cyan, drawn from the ANSI palette so it adapts to l
   ```bash
   export CLAUDE_SESSION_TOPICS_COLOR="cyan"
   ```
+
+### All options at once
+
+`--options` opens an interactive menu showing the current color, voice, and volume, and launches the matching picker for whichever you choose:
+
+```bash
+npx @alexismunozdev/claude-session-topics --options
+```
 
 ## Token usage
 

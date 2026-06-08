@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.0] — 2026-06-08
+
+### Added
+- Voice volume control via `VOICE_VOLUME` (0–100, default 100). Set it with `--volume <n>`, or `--volume` alone for an interactive slider that previews the current voice at each level. Applied per platform: macOS `[[volm]]`, espeak `-a`, spd-say `-i`, Windows SAPI `$s.Volume`.
+- `--options` CLI: an interactive menu showing the current color, voice, and volume that launches the matching picker for whichever you choose (read-only summary on non-TTY).
+
 ## [5.3.2] — 2026-06-06
 
 ### Fixed

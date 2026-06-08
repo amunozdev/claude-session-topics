@@ -5,6 +5,7 @@ import {
   parseEspeakVoices,
   buildSpeakCommand,
   psEscape,
+  normalizeVolume,
 } from '../../bin/tts.js';
 
 describe('tts parsers', () => {
@@ -92,6 +93,49 @@ describe('buildSpeakCommand', () => {
   it('Linux spd-say falls back to a language flag', () => {
     expect(buildSpeakCommand({ platform: 'linux', engine: 'spd-say', voiceId: 'es', message: 'Hola' }))
       .toEqual({ cmd: 'spd-say', args: ['-l', 'es', 'Hola'] });
+  });
+
+  describe('volume', () => {
+    it('macOS prepends the [[volm]] embedded command below full', () => {
+      expect(buildSpeakCommand({ platform: 'darwin', voiceId: 'Mónica', message: 'Hola', volume: 70 }))
+        .toEqual({ cmd: 'say', args: ['-v', 'Mónica', '[[volm 0.70]] Hola'] });
+    });
+
+    it('Windows sets $s.Volume before speaking', () => {
+      const { args } = buildSpeakCommand({ platform: 'win32', engine: 'powershell.exe', voiceId: '', message: 'Hi', volume: 70 });
+      expect(args[2]).toContain('$s.Volume = 70;');
+    });
+
+    it('Linux espeak passes -a amplitude (0–200)', () => {
+      expect(buildSpeakCommand({ platform: 'linux', engine: 'espeak-ng', voiceId: 'es', message: 'Hola', volume: 70 }))
+        .toEqual({ cmd: 'espeak-ng', args: ['-a', '140', '-v', 'es', 'Hola'] });
+    });
+
+    it('Linux spd-say maps to -i (−100..100)', () => {
+      expect(buildSpeakCommand({ platform: 'linux', engine: 'spd-say', voiceId: 'es', message: 'Hola', volume: 70 }))
+        .toEqual({ cmd: 'spd-say', args: ['-i', '40', '-l', 'es', 'Hola'] });
+    });
+
+    it('omits volume handling when unset or 100 (no behavior change)', () => {
+      expect(buildSpeakCommand({ platform: 'darwin', voiceId: 'Alex', message: 'Hi' }))
+        .toEqual({ cmd: 'say', args: ['-v', 'Alex', 'Hi'] });
+      expect(buildSpeakCommand({ platform: 'linux', engine: 'espeak', voiceId: 'en', message: 'Hi', volume: 100 }))
+        .toEqual({ cmd: 'espeak', args: ['-v', 'en', 'Hi'] });
+    });
+  });
+});
+
+describe('normalizeVolume', () => {
+  it('returns null for unset or full (no change)', () => {
+    expect(normalizeVolume(null)).toBeNull();
+    expect(normalizeVolume(undefined)).toBeNull();
+    expect(normalizeVolume(100)).toBeNull();
+  });
+
+  it('clamps out-of-range values', () => {
+    expect(normalizeVolume(-5)).toBe(0);
+    expect(normalizeVolume(250)).toBeNull(); // clamps to 100 → no change
+    expect(normalizeVolume(50)).toBe(50);
   });
 });
 
