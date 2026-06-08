@@ -221,3 +221,10 @@ EOF
   run bash "$test_script"
   [ "$status" -eq 0 ]
 }
+
+@test "test_refine_uses_no_session_persistence" {
+  # The headless `claude -p` title-generation run must not persist its own
+  # transcript, or it shows up as an orphan session in the IDE list.
+  run grep -q -- "--no-session-persistence" "$PROJECT_ROOT/scripts/user-prompt-hook.sh"
+  [ "$status" -eq 0 ]
+}
